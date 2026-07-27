@@ -9,8 +9,10 @@ under the GNU General Public License v3.0 or later - see [LICENSE](LICENSE).
 ## Inflect-Micro-v2-ONNX / Inflect-Nano-v2-ONNX
 
 - **License:** Apache License 2.0
-- **Credit:** Official packaging by Owen Song; ONNX conversion by Robert Bak
-  (`webtts-inflect`).
+- **Credit:** **Inflect** models by Owen Song ([Hugging Face](https://huggingface.co/owensong),
+  [Inflect project](https://github.com/owenawsong/Inflect),
+  [v2 evaluation writeup](https://huggingface.co/owensong/Inflect-Micro-v2/blob/main/docs/EVALUATION.md));
+  ONNX conversion by Robert Bak ([`webtts-inflect`](https://github.com/robertbak/webtts-inflect)).
 - **Sources:**
   - https://huggingface.co/owensong/Inflect-Micro-v2-ONNX
   - https://huggingface.co/owensong/Inflect-Nano-v2-ONNX
