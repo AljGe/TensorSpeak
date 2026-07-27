@@ -107,11 +107,17 @@ android {
 
     testOptions {
         unitTests.isIncludeAndroidResources = true
+        // PhonemeTokenizer logs dropped phonemes through android.util.Log, which is a stub
+        // that throws in JVM unit tests unless the stubs are told to return defaults.
+        unitTests.isReturnDefaultValues = true
     }
 }
 
 dependencies {
-    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.20.0")
+    // 1.27.0, not 1.20.0: the 1.20 AAR ships libonnxruntime4j_jni.so with 4 KB LOAD
+    // segments, which fails the 16 KB ELF check on Android 15+ devices. 1.27 aligns both
+    // libonnxruntime.so and the JNI shim to 0x4000.
+    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.27.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
     implementation("androidx.core:core-ktx:1.15.0")
     implementation("androidx.appcompat:appcompat:1.7.0")

@@ -95,3 +95,12 @@ target_link_libraries(espeak-ng PRIVATE ucd m)
 add_library(inflect_espeak SHARED inflect_espeak_jni.c)
 target_compile_definitions(inflect_espeak PRIVATE "LIBESPEAK_NG_EXPORT=1")
 target_link_libraries(inflect_espeak PRIVATE espeak-ng log)
+
+# Android 15+ runs on 16 KB pages, and the loader rejects a library whose LOAD segments are
+# aligned to the old 4 KB. NDK r27+ does this by default, but the nix SDK provisions r26,
+# so ask the linker directly rather than force a multi-GB NDK re-provision. Harmless on
+# 4 KB devices - it only pads the segment alignment.
+target_link_options(inflect_espeak PRIVATE
+  "-Wl,-z,max-page-size=16384"
+  "-Wl,-z,common-page-size=16384"
+)

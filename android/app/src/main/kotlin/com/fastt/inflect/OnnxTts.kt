@@ -4,6 +4,7 @@ import ai.onnxruntime.OnnxTensor
 import ai.onnxruntime.OrtEnvironment
 import ai.onnxruntime.OrtSession
 import android.content.Context
+import android.util.Log
 import java.io.Closeable
 import java.nio.FloatBuffer
 import java.nio.LongBuffer
@@ -39,20 +40,77 @@ class OnnxTts private constructor(
 ) : Closeable {
 
     /**
+     * Synthesize chunk by chunk, handing each piece of audio to [onAudio] as soon as it is
+     * decoded. Mirrors `InflectPipeline.synthesize` in
+     * [pipeline.py](../../../../../../../src/inflect_sandbox/pipeline.py), including the
+     * boundary pauses and the per-chunk seed advance.
+     *
+     * This is the streaming entry point, and it is what makes the engine usable on long
+     * text: decoding is ~97% of the work and scales with utterance length, so waiting for a
+     * whole paragraph before emitting a sample put 8-14 s between the tap and the first
+     * sound. Emitting per chunk makes time-to-first-audio the cost of one sentence instead.
+     *
+     * @param onAudio receives each piece in order; return false to abandon the utterance.
      * @param speed 0.5..2.0; sent to the graph as `length_scale = 1 / speed`.
      * @param variation 0.0..1.0, the `noise_scale` applied to the latent draw.
+     */
+    suspend fun synthesizeStreaming(
+        text: String,
+        speed: Float = 1.0f,
+        variation: Float = 0.667f,
+        seed: Long = 0L,
+        onAudio: (FloatArray) -> Boolean,
+    ): Unit = withContext(Dispatchers.Default) {
+        require(speed in 0.5f..2.0f) { "speed must be between 0.5 and 2.0" }
+        require(variation in 0.0f..1.0f) { "variation must be between 0.0 and 1.0" }
+
+        val chunks = TextChunker.split(text)
+        for ((index, chunk) in chunks.withIndex()) {
+            if (index > 0) {
+                val pause = TextChunker.boundaryPauseSeconds(chunks[index - 1])
+                val silence = FloatArray(Math.round(SAMPLE_RATE * pause))
+                if (!onAudio(silence)) return@withContext
+            }
+
+            val phonemeText = phonemes.phonemize(chunk)
+            // A chunk can phonemize to nothing (punctuation the normalizer left behind).
+            // The reference raises here; an engine driving the system voice must not die on
+            // one unspeakable fragment, so it is skipped - the pause around it still plays.
+            if (phonemeText.isBlank()) {
+                Log.w(TAG, "chunk produced no phonemes, skipping: $chunk")
+                continue
+            }
+
+            // seed advances per chunk so adjacent chunks don't share a noise draw
+            val tokens = tokenizer.toTokens(phonemeText)
+            val audio = synthesizeTokens(tokens, speed, variation, seed + index)
+            for (i in audio.indices) audio[i] = audio[i].coerceIn(-1.0f, 1.0f)
+            if (!onAudio(audio)) return@withContext
+        }
+    }
+
+    /**
+     * The whole utterance as one array. Convenience over [synthesizeStreaming] for callers
+     * that want a complete waveform (the demo activity, the parity test); the TTS service
+     * uses the streaming form.
      */
     suspend fun synthesize(
         text: String,
         speed: Float = 1.0f,
         variation: Float = 0.667f,
         seed: Long = 0L,
-    ): FloatArray = withContext(Dispatchers.Default) {
-        require(speed in 0.5f..2.0f) { "speed must be between 0.5 and 2.0" }
-        require(variation in 0.0f..1.0f) { "variation must be between 0.0 and 1.0" }
+    ): FloatArray {
+        val pieces = mutableListOf<FloatArray>()
+        synthesizeStreaming(text, speed, variation, seed) { pieces.add(it); true }
 
-        val tokens = tokenizer.toTokens(phonemes.phonemize(text))
-        synthesizeTokens(tokens, speed, variation, seed)
+        val total = pieces.sumOf { it.size }
+        val waveform = FloatArray(total)
+        var offset = 0
+        for (piece in pieces) {
+            piece.copyInto(waveform, offset)
+            offset += piece.size
+        }
+        return waveform
     }
 
     fun synthesizeTokens(
@@ -146,6 +204,28 @@ class OnnxTts private constructor(
     companion object {
         const val SAMPLE_RATE = 24_000
 
+        private const val TAG = "OnnxTts"
+
+        /**
+         * Session options for one graph.
+         *
+         * With XNNPACK the session's own intra-op pool is pinned to a single thread and the
+         * thread budget handed to XNNPACK instead - ORT's guidance, and running both pools
+         * at full width just oversubscribes the little cores.
+         */
+        private fun sessionOptions(xnnpack: Boolean): OrtSession.SessionOptions {
+            val threads = Runtime.getRuntime().availableProcessors().coerceAtMost(4)
+            return OrtSession.SessionOptions().apply {
+                setOptimizationLevel(OrtSession.SessionOptions.OptLevel.ALL_OPT)
+                if (xnnpack) {
+                    addXnnpack(mapOf("intra_op_num_threads" to threads.toString()))
+                    setIntraOpNumThreads(1)
+                } else {
+                    setIntraOpNumThreads(threads)
+                }
+            }
+        }
+
         /**
          * Reads both graphs for [variant] and the shared symbol table out of assets.
          * The graphs are stored uncompressed (see `noCompress += "onnx"`), so this is a
@@ -158,19 +238,25 @@ class OnnxTts private constructor(
         ): OnnxTts = withContext(Dispatchers.IO) {
             val assets = context.assets
             val env = OrtEnvironment.getEnvironment()
-            val options = OrtSession.SessionOptions().apply {
-                setIntraOpNumThreads(Runtime.getRuntime().availableProcessors().coerceAtMost(4))
-            }
 
             val prefix = variant.id
-            val duration = env.createSession(
-                assets.open("$prefix/duration.onnx").readBytes(),
-                options,
-            )
-            val decode = env.createSession(
-                assets.open("$prefix/decode.onnx").readBytes(),
-                options,
-            )
+            val durationBytes = assets.open("$prefix/duration.onnx").readBytes()
+            val decodeBytes = assets.open("$prefix/decode.onnx").readBytes()
+
+            // decode.onnx is ~97% of synthesis time and is a convolution stack, which is
+            // exactly XNNPACK's strength. It is compiled into the ORT AAR but has to be
+            // asked for; unsupported nodes fall back to the CPU provider per-node.
+            var duration: OrtSession
+            var decode: OrtSession
+            try {
+                duration = env.createSession(durationBytes, sessionOptions(xnnpack = true))
+                decode = env.createSession(decodeBytes, sessionOptions(xnnpack = true))
+            } catch (error: Exception) {
+                // Not fatal: an ORT build or device without XNNPACK still runs on CPU.
+                Log.w(TAG, "XNNPACK unavailable, falling back to the CPU provider", error)
+                duration = env.createSession(durationBytes, sessionOptions(xnnpack = false))
+                decode = env.createSession(decodeBytes, sessionOptions(xnnpack = false))
+            }
             val tokenizer = PhonemeTokenizer.fromJson(
                 assets.open("symbols.json").bufferedReader().use { it.readText() }
             )

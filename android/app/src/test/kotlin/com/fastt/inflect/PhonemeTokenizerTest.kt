@@ -45,8 +45,50 @@ class PhonemeTokenizerTest {
     }
 
     @Test
-    fun `rejects symbols outside the table`() {
+    fun `rejects text with nothing speakable left`() {
         assertThrows(IllegalArgumentException::class.java) { tokenizer.toTokens("日") }
+    }
+
+    /**
+     * eSpeak emits U+0303 COMBINING TILDE for the nasal vowel in French loanwords
+     * ("croissant", "blanc", "Provence"), which is not one of the 178 symbols. This used to
+     * throw and fail the whole utterance; it must now drop the mark and keep the vowel.
+     */
+    @Test
+    fun `drops the combining tilde but keeps the base vowel`() {
+        val (sanitized, dropped) = tokenizer.sanitize("kwˈɑːsɑ̃")
+        assertEquals("kwˈɑːsɑ", sanitized)
+        assertEquals(listOf('̃'), dropped)
+
+        assertArrayEquals(tokenizer.toTokens("kwˈɑːsɑ"), tokenizer.toTokens("kwˈɑːsɑ̃"))
+    }
+
+    /**
+     * Tokenizes every golden row's phoneme string on the host. The corpus carries the tokens
+     * Python produced, so this checks the Kotlin tokenizer - sanitizer included - against the
+     * reference without needing eSpeak or a device.
+     */
+    @Test
+    fun `matches python tokens across the golden corpus`() {
+        val rows = JSONArray(resource("frontend_golden.json"))
+        assertEquals("corpus looks truncated", true, rows.length() > 100)
+
+        val failures = mutableListOf<String>()
+        for (index in 0 until rows.length()) {
+            val row = rows.getJSONObject(index)
+            val expectedJson = row.getJSONArray("tokens")
+            val expected = LongArray(expectedJson.length()) { expectedJson.getLong(it) }
+            val actual = tokenizer.toTokens(row.getString("phonemes"))
+            if (!expected.contentEquals(actual)) {
+                failures.add("  ${row.getString("text")}\n  phonemes: ${row.getString("phonemes")}")
+            }
+        }
+        if (failures.isNotEmpty()) {
+            throw AssertionError(
+                "${failures.size}/${rows.length()} rows tokenize differently:\n" +
+                    failures.joinToString("\n\n")
+            )
+        }
     }
 
     @Test

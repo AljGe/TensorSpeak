@@ -71,10 +71,18 @@ class InflectTtsService : TextToSpeechService() {
             // speechRate and pitch both arrive as percentages with 100 = normal. The graphs
             // take a length scale but have no pitch control, so pitch is ignored.
             val speed = (request.speechRate / 100.0f).coerceIn(MIN_SPEED, MAX_SPEED)
-            val waveform = runBlocking { engine.synthesize(text, speed = speed) }
 
+            // start() before synthesis, so the framework opens the audio path while the
+            // first chunk is still decoding rather than after the last one finishes.
             callback.start(OnnxTts.SAMPLE_RATE, AudioFormat.ENCODING_PCM_16BIT, 1)
-            if (!streamPcm(waveform, callback)) {
+
+            var delivered = true
+            runBlocking {
+                engine.synthesizeStreaming(text, speed = speed) { audio ->
+                    streamPcm(audio, callback).also { delivered = it }
+                }
+            }
+            if (!delivered) {
                 // A cancelled utterance is reported as an error; `done()` would tell the
                 // framework the whole request was spoken.
                 callback.error()

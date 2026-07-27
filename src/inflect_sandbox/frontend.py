@@ -12,12 +12,15 @@ in `android/` must match. See `docs/TENSOR_CONTRACT.md`.
 
 from __future__ import annotations
 
+import logging
 import re
 import sys
 from functools import lru_cache
 from pathlib import Path
 
 import numpy as np
+
+logger = logging.getLogger(__name__)
 
 MODELS_DIR = Path(__file__).resolve().parents[2] / "models"
 DEFAULT_VARIANT = "micro"
@@ -85,17 +88,41 @@ def text_to_phonemes(text: str) -> str:
     return run_vits_frontend(text).phoneme_text
 
 
+def sanitize_phonemes(phoneme_text: str) -> tuple[str, list[str]]:
+    """Drop phonemes the 178-symbol table cannot represent.
+
+    eSpeak-ng emits a handful of characters the VITS symbol table never had, and in
+    practice one of them is common: U+0303 COMBINING TILDE, the nasal vowel in French
+    loanwords that ordinary English text is full of - "croissant", "blanc",
+    "denouement", "Provence". Because the mark trails its base vowel, dropping it leaves
+    `ɑ̃` as `ɑ`, which is what an en-US voice approximates anyway.
+
+    The alternative - what this used to do - was to raise and fail the *entire*
+    utterance over one character, so a single "croissant" silenced a whole paragraph.
+
+    Returns the sanitized text plus the characters that were dropped, so callers can
+    log them. Android's `PhonemeTokenizer.sanitize` must stay identical to this.
+    """
+    symbol_to_id = _symbol_to_id()
+    kept = [c for c in phoneme_text if c in symbol_to_id]
+    dropped = sorted({c for c in phoneme_text if c not in symbol_to_id})
+    return "".join(kept), dropped
+
+
 def phonemes_to_tokens(phoneme_text: str) -> np.ndarray:
     """Map IPA characters to ids and interleave the blank id 0 (`add_blank: true`).
 
     Result is shaped [1, 2 * len(phonemes) + 1] as `duration.onnx` expects for `tokens`.
+    Unrepresentable characters are dropped rather than raising; see [sanitize_phonemes].
     """
     symbol_to_id = _symbol_to_id()
-    unknown = sorted({c for c in phoneme_text if c not in symbol_to_id})
-    if unknown:
-        raise ValueError(f"phonemes outside the symbol table: {unknown!r}")
+    sanitized, dropped = sanitize_phonemes(phoneme_text)
+    if dropped:
+        logger.warning(
+            "dropped %d phoneme(s) outside the symbol table: %r", len(dropped), dropped
+        )
 
-    sequence = [symbol_to_id[symbol] for symbol in phoneme_text]
+    sequence = [symbol_to_id[symbol] for symbol in sanitized]
     if not sequence:
         raise ValueError("The text frontend produced no speakable tokens.")
 

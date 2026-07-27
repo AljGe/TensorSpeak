@@ -1,5 +1,6 @@
 package com.fastt.inflect
 
+import android.util.Log
 import org.json.JSONObject
 
 /**
@@ -16,16 +17,42 @@ class PhonemeTokenizer(private val symbols: List<String>) {
         symbols.withIndex().associate { (index, symbol) -> symbol to index }
 
     /**
+     * Drops phonemes the 178-symbol table cannot represent. Mirrors `sanitize_phonemes` in
+     * [frontend.py](../../../../../../../src/inflect_sandbox/frontend.py).
+     *
+     * eSpeak-ng emits a few characters the VITS symbol table never had, and one of them is
+     * common in ordinary English: U+0303 COMBINING TILDE, the nasal vowel in French
+     * loanwords - "croissant", "blanc", "denouement", "Provence". The mark trails its base
+     * vowel, so dropping it leaves `ɑ̃` as `ɑ`, which is what an en-US voice approximates.
+     *
+     * This used to throw, which failed the *whole* utterance over one character - a single
+     * "croissant" silenced the paragraph around it.
+     */
+    fun sanitize(phonemeText: String): Sanitized {
+        val kept = StringBuilder(phonemeText.length)
+        val dropped = linkedSetOf<Char>()
+        for (char in phonemeText) {
+            if (symbolToId.containsKey(char.toString())) kept.append(char) else dropped.add(char)
+        }
+        return Sanitized(kept.toString(), dropped.toList())
+    }
+
+    data class Sanitized(val phonemeText: String, val dropped: List<Char>)
+
+    /**
      * Interleaves the blank id 0 around every phoneme (`add_blank: true` in config.json),
      * producing `2 * n + 1` ids shaped for the `tokens` input.
+     *
+     * Unrepresentable characters are dropped rather than throwing; see [sanitize].
      */
     fun toTokens(phonemeText: String): LongArray {
-        require(phonemeText.isNotEmpty()) { "The text frontend produced no speakable tokens." }
-
-        val ids = phonemeText.map { char ->
-            symbolToId[char.toString()]
-                ?: throw IllegalArgumentException("phoneme outside the symbol table: '$char'")
+        val (sanitized, dropped) = sanitize(phonemeText)
+        if (dropped.isNotEmpty()) {
+            Log.w(TAG, "dropped ${dropped.size} phoneme(s) outside the symbol table: $dropped")
         }
+        require(sanitized.isNotEmpty()) { "The text frontend produced no speakable tokens." }
+
+        val ids = sanitized.map { char -> symbolToId.getValue(char.toString()) }
 
         val withBlanks = LongArray(ids.size * 2 + 1)
         for ((index, id) in ids.withIndex()) {
@@ -35,6 +62,8 @@ class PhonemeTokenizer(private val symbols: List<String>) {
     }
 
     companion object {
+        private const val TAG = "PhonemeTokenizer"
+
         fun fromJson(json: String): PhonemeTokenizer {
             val array = JSONObject(json).getJSONArray("symbols")
             return PhonemeTokenizer(List(array.length()) { array.getString(it) })

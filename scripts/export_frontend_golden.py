@@ -26,7 +26,10 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from inflect_sandbox.frontend import (  # noqa: E402
     _install_upstream_path,
+    boundary_pause_seconds,
     phonemes_to_tokens,
+    sanitize_phonemes,
+    split_text,
     text_to_phonemes,
 )
 
@@ -200,6 +203,17 @@ MIXED = [
     "Suite 300, 742 North Evergreen Terrace, costs $2,500 per month.",
 ]
 
+# Loanwords where eSpeak emits a nasal vowel: the base vowel carries U+0303 COMBINING
+# TILDE, which is not one of the 178 symbols. These used to fail the whole utterance;
+# `sanitize_phonemes` now drops the mark, and these rows pin that both sides drop it the
+# same way. See the note on `frontend.sanitize_phonemes`.
+NASAL_VOWELS = [
+    "She ordered a croissant and a glass of vin blanc.",
+    "We drove through Provence on the way to Besancon.",
+    "The denouement was a rapprochement between the two sides.",
+    "A nonchalant entrepreneur with a certain penchant for ambiance.",
+]
+
 CORPUS = (
     MONEY
     + DATES
@@ -215,7 +229,50 @@ CORPUS = (
     + PHONEME_OVERRIDES
     + GENERAL
     + MIXED
+    + NASAL_VOWELS
 )
+
+
+# Texts chosen to hit every branch of `split_text`: the sentence regex, the internal-mark
+# fallback, the whitespace fallback, the `limit // 2` guards and the mid-word cut, plus each
+# BOUNDARY_PAUSES key. `TextChunkerTest` grades the Kotlin port against these.
+CHUNKING_CORPUS = [
+    # Short enough to stay whole.
+    "Hello world.",
+    "",
+    "   ",
+    # Whitespace collapsing.
+    "Multiple   spaces\tand\nnewlines   collapse.",
+    # Every boundary-pause mark, so the pause table is covered.
+    "Is this a question? Yes it is. Really! Wait; hold on: now, go.",
+    # No terminal punctuation at all - falls to DEFAULT_PAUSE.
+    "No punctuation here just words",
+    # Longer than the limit, with commas to break on.
+    ("A very long sentence that keeps going and going without stopping, "
+     "and then continues past the limit with another clause, and still more text "
+     "after that clause so the splitter has to make a second cut somewhere sensible, "
+     "and finally it ends here after quite a lot of words indeed."),
+    # Longer than the limit with no internal marks - whitespace fallback.
+    ("word " * 90).strip(),
+    # Longer than the limit with no spaces at all - mid-word cut.
+    "x" * 400,
+    # A mark sitting in the first half of the window, so the `limit // 2` guard rejects it.
+    "short, " + ("y" * 400),
+]
+
+
+def _chunking_rows() -> list[dict]:
+    rows = []
+    for text in CHUNKING_CORPUS:
+        chunks = split_text(text)
+        rows.append(
+            {
+                "text": text,
+                "chunks": chunks,
+                "pauses": [boundary_pause_seconds(chunk) for chunk in chunks],
+            }
+        )
+    return rows
 
 
 def main() -> None:
@@ -223,17 +280,17 @@ def main() -> None:
     from inflect_nano_v2_frontend import normalize_text
 
     rows = []
-    skipped = []
+    sanitized_rows = []
     for text in CORPUS:
         normalized = normalize_text(text)
         phonemes = text_to_phonemes(text)
-        try:
-            tokens = phonemes_to_tokens(phonemes)[0].tolist()
-        except ValueError as error:
-            # A phoneme outside the 178-symbol table would fail on Android too; record the
-            # row without tokens rather than silently dropping the normalizer coverage.
-            skipped.append((text, str(error)))
-            tokens = None
+        # `phonemes` is stored raw, tilde and all - it is what the Android phonemizer must
+        # reproduce. `tokens` comes from the sanitized form, because both sides drop
+        # unrepresentable characters inside their tokenizer. See `sanitize_phonemes`.
+        _, dropped = sanitize_phonemes(phonemes)
+        if dropped:
+            sanitized_rows.append((text, dropped))
+        tokens = phonemes_to_tokens(phonemes)[0].tolist()
         rows.append(
             {
                 "text": text,
@@ -248,13 +305,18 @@ def main() -> None:
         destination.mkdir(parents=True, exist_ok=True)
         (destination / "frontend_golden.json").write_text(payload)
 
+    # Chunking is pure string handling, so only the JVM test needs it - no device required.
+    chunking = json.dumps(_chunking_rows(), ensure_ascii=False, indent=2)
+    (TEST_RESOURCES / "chunking_golden.json").write_text(chunking)
+
     print(f"wrote {len(rows)} rows to:")
     print(f"  {TEST_RESOURCES / 'frontend_golden.json'}")
     print(f"  {ANDROID_TEST_ASSETS / 'frontend_golden.json'}")
-    if skipped:
-        print(f"\n{len(skipped)} rows have no tokens (phonemes outside the symbol table):")
-        for text, error in skipped:
-            print(f"  {text!r}: {error}")
+    if sanitized_rows:
+        print(f"\n{len(sanitized_rows)} rows dropped phonemes outside the symbol table:")
+        for text, dropped in sanitized_rows:
+            marks = ", ".join(f"U+{ord(c):04X}" for c in dropped)
+            print(f"  {text!r}: {marks}")
 
 
 if __name__ == "__main__":
