@@ -12,7 +12,14 @@ TensorSpeak is a separate Android port and system TTS wrapper; the voices and gr
 
 [![Get it on Obtainium](https://raw.githubusercontent.com/ImranR98/Obtainium/main/assets/graphics/badge_obtainium.png)](http://apps.obtainium.imranr.dev/redirect.html?r=obtainium://add/https://github.com/AljGe/TensorSpeak)
 
-Install and update from [GitHub Releases](https://github.com/AljGe/TensorSpeak/releases) with [Obtainium](https://github.com/ImranR98/Obtainium), or download `TensorSpeak-*-unified.apk` manually. Releases are signed, unified (`arm64-v8a` + `x86_64`), and include both model variants.
+Install and update from [GitHub Releases](https://github.com/AljGe/TensorSpeak/releases) with [Obtainium](https://github.com/ImranR98/Obtainium), or download a per-ABI APK manually. Releases are signed and include both model variants.
+
+| Device | Asset | Obtainium APK filter |
+| --- | --- | --- |
+| Phones (almost all) | `TensorSpeak-*-arm64-v8a.apk` | `arm64` |
+| x86_64 emulator / Chromebook | `TensorSpeak-*-x86_64.apk` | `x86_64` |
+
+In Obtainium, set **APK filter** to `arm64` on phones so updates do not pick the x86_64 build.
 
 After install, enable **TensorSpeak** under **Settings → Accessibility → Text-to-speech output** (or your device’s equivalent).
 
@@ -88,11 +95,11 @@ Configure signing via [`.signing.env.example`](.signing.env.example) → `.signi
 
 ```bash
 set -a && source .signing.env && set +a
-./scripts/build_signed_release_apk.sh          # → TensorSpeak-<version>-unified.apk
-./scripts/build_signed_release_apk.sh --upload # refresh GitHub release asset
+./scripts/build_signed_release_apk.sh          # → TensorSpeak-<version>-{arm64-v8a,x86_64}.apk
+./scripts/build_signed_release_apk.sh --upload # refresh both GitHub release assets
 ```
 
-Publish releases (not draft-only) with tag matching `versionName` in `android/app/build.gradle.kts`, one APK asset per release, and links to [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) and [docs/MODEL_ATTRIBUTION.md](docs/MODEL_ATTRIBUTION.md).
+Publish releases (not draft-only) with tag matching `versionName` in `android/app/build.gradle.kts`, both per-ABI APK assets, and links to [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) and [docs/MODEL_ATTRIBUTION.md](docs/MODEL_ATTRIBUTION.md).
 
 ## Credits
 

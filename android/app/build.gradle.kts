@@ -20,11 +20,9 @@ android {
         versionName = "0.2.1"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
-        // ONNX Runtime ships native libs for four ABIs; keeping only these two roughly
-        // halves the APK. espeak-ng is compiled for the same pair.
-        ndk {
-            abiFilters += listOf("arm64-v8a", "x86_64")
-        }
+        // ABI set lives in splits{} below — AGP forbids combining that with ndk.abiFilters.
+        // ONNX Runtime's AAR ships four ABIs; splits keep only arm64-v8a + x86_64.
+        // espeak-ng is compiled for the same pair via the split outputs.
 
         externalNativeBuild {
             cmake {
@@ -80,9 +78,21 @@ android {
         noCompress += "onnx"
     }
 
+    // Per-ABI release APKs for Obtainium / GitHub (phones take arm64; emulators x86_64).
+    // No universal fat APK — that would re-pack both ORT natives (~62 MB).
+    splits {
+        abi {
+            isEnable = true
+            reset()
+            include("arm64-v8a", "x86_64")
+            isUniversalApk = false
+        }
+    }
+
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             if (releaseSigningConfigured) {
                 signingConfig = signingConfigs.getByName("release")
