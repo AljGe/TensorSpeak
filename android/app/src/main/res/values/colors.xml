@@ -4,4 +4,19 @@
     <color name="brand_background">#15182B</color>
     <color name="brand_wave_start">#6EE7B7</color>
     <color name="brand_wave_end">#818CF8</color>
+
+    <color name="ts_primary">#3D5A80</color>
+    <color name="ts_on_primary">#FFFFFF</color>
+    <color name="ts_primary_container">#D4E4F7</color>
+    <color name="ts_on_primary_container">#15182B</color>
+    <color name="ts_secondary">#5C6B8A</color>
+    <color name="ts_on_secondary">#FFFFFF</color>
+    <color name="ts_surface">#F8F9FC</color>
+    <color name="ts_on_surface">#15182B</color>
+    <color name="ts_surface_variant">#E2E6EF</color>
+    <color name="ts_on_surface_variant">#3A4258</color>
+    <color name="ts_error">#BA1A1A</color>
+    <color name="ts_on_error">#FFFFFF</color>
+    <color name="ts_icon_background">#15182B</color>
+    <color name="ts_icon_foreground">#F8FAFC</color>
 </resources>
