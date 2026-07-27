@@ -1,6 +1,9 @@
 package com.fastt.inflect
 
 /**
+ * Copyright (C) 2026 AljGe
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ *
  * Thin, serialized wrapper around `libinflect_espeak.so`.
  *
  * eSpeak-ng keeps its translator state in globals, so [textToPhonemes] is not reentrant -

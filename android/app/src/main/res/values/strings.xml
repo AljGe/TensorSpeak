@@ -10,4 +10,6 @@
     <string name="tts_engine_label">Inflect</string>
     <string name="model_label">Model</string>
     <string name="model_loading">Loading %1$s…</string>
+    <string name="open_source_licenses">Open source licenses</string>
+    <string name="licenses_title">Open source licenses</string>
 </resources>

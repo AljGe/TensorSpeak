@@ -1,5 +1,6 @@
 package com.fastt.inflect
 
+import android.content.Intent
 import android.os.Bundle
 import android.view.View
 import android.widget.AdapterView
@@ -86,6 +87,10 @@ class MainActivity : ComponentActivity() {
                     speak.isEnabled = tts != null && !loadingModel
                 }
             }
+        }
+
+        findViewById<Button>(R.id.licenses).setOnClickListener {
+            startActivity(Intent(this, LicensesActivity::class.java))
         }
     }
 

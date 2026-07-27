@@ -149,3 +149,56 @@ currently reports **149/149 rows match**.
 `systemImages.enable = false` and no device is attached, so nothing has run
 `./gradlew :app:connectedDebugAndroidTest`. Until it does, the Kotlin-specific half of the
 port — Java vs Python regex semantics in particular — is argued for, not demonstrated.
+
+## Building a release APK
+
+1. Fetch models and export assets (graphs are gitignored; Apache-2.0 `LICENSE` files are not):
+
+```bash
+python scripts/fetch_model.py
+python scripts/export_android_assets.py --espeak-data
+```
+
+2. Optional signing — create `android/keystore.properties` (gitignored) **or** set env vars:
+
+```properties
+storeFile=/absolute/path/to/fastt-release.jks
+storePassword=...
+keyAlias=fastt
+keyPassword=...
+```
+
+```bash
+export FASTT_STORE_FILE=/absolute/path/to/fastt-release.jks
+export FASTT_STORE_PASSWORD=...
+export FASTT_KEY_ALIAS=fastt
+export FASTT_KEY_PASSWORD=...
+```
+
+3. Build:
+
+```bash
+cd android && ./gradlew :app:assembleRelease
+# APK: app/build/outputs/apk/release/app-release.apk  (or app-release-unsigned.apk)
+```
+
+Without keystore props/env, the release build still completes but is not release-signed.
+
+## GitHub Releases (when you publish)
+
+- Push the full source repository (including this README, `LICENSE`, and
+  `THIRD_PARTY_NOTICES.md`) before or at the same time as the binary.
+- Tag the release to match `versionName` in `app/build.gradle.kts` (currently `0.1.0`).
+- Attach the signed release APK to the GitHub Release.
+- Link `THIRD_PARTY_NOTICES.md` / `docs/MODEL_ATTRIBUTION.md` from the release notes.
+
+## License
+
+**fastt** is licensed under the [GNU General Public License v3.0 or later](LICENSE)
+(Copyright (C) 2026 AljGe). The project links [eSpeak-ng](https://github.com/espeak-ng/espeak-ng)
+(GPL-3.0), so the application is distributed under GPL-3.0-or-later.
+
+Third-party models and libraries (Inflect ONNX Apache-2.0, ONNX Runtime MIT, eSpeak-ng GPL)
+are listed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). Model redistribution details
+are in [docs/MODEL_ATTRIBUTION.md](docs/MODEL_ATTRIBUTION.md). The in-app **Open source
+licenses** screen shows the same notices offline.

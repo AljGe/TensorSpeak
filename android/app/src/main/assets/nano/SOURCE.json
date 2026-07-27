@@ -1,0 +1,16 @@
+{
+  "format": "inflect_v2_onnx_source_v1",
+  "model": "Inflect-Nano-v2",
+  "source_repository": "owensong/Inflect-Nano-v2",
+  "source_revision": "67fc9249e0bb8ab4b196d25cb09b6dd43f5e4f13",
+  "source_model_file": "model.pth",
+  "source_model_sha256": "bfca468489c9069361d6b87b295a17eef611af8ff09854ce0b80305d9122f5b3",
+  "conversion_repository": "https://github.com/robertbak/webtts-inflect",
+  "conversion_commit": "60832b1978115e4ed7fdddce4d9b9fd9161f9fe7",
+  "conversion_author": "Robert Bak",
+  "official_packaging": "Owen Song",
+  "precision": "FP32",
+  "onnx_opset": 17,
+  "sample_rate_hz": 24000,
+  "license": "Apache-2.0"
+}

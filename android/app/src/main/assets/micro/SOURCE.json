@@ -1,0 +1,16 @@
+{
+  "format": "inflect_v2_onnx_source_v1",
+  "model": "Inflect-Micro-v2",
+  "source_repository": "owensong/Inflect-Micro-v2",
+  "source_revision": "3e8c567f9bce1a309eea12d38ca9fbf7050df72e",
+  "source_model_file": "model.pth",
+  "source_model_sha256": "3eede065c9ccfa88ade0a5a9a5c23de34afcbbb32213e59aad44d5cf100fdee8",
+  "conversion_repository": "https://github.com/robertbak/webtts-inflect",
+  "conversion_commit": "60832b1978115e4ed7fdddce4d9b9fd9161f9fe7",
+  "conversion_author": "Robert Bak",
+  "official_packaging": "Owen Song",
+  "precision": "FP32",
+  "onnx_opset": 17,
+  "sample_rate_hz": 24000,
+  "license": "Apache-2.0"
+}

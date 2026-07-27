@@ -84,3 +84,10 @@ android/.kotlin/
 .devenv.flake.nix
 AGENTS.md
 CLAUDE.md
+
+# Release signing — never commit keys or local signing props
+*.jks
+*.keystore
+*.p12
+keystore.properties
+signing.properties

@@ -1,3 +1,6 @@
+// Copyright (C) 2026 AljGe
+// SPDX-License-Identifier: GPL-3.0-or-later
+//
 // JNI bridge to eSpeak-ng's espeak_TextToPhonemes.
 //
 // This mirrors phonemizer's EspeakWrapper.text_to_phonemes (phonemizer/backend/espeak/

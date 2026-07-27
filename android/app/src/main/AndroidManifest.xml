@@ -16,6 +16,12 @@
             </intent-filter>
         </activity>
 
+        <activity
+            android:name=".LicensesActivity"
+            android:exported="false"
+            android:label="@string/licenses_title"
+            android:parentActivityName=".MainActivity" />
+
         <!-- System-wide voice: selectable in Settings > Accessibility > Text-to-speech. -->
         <service
             android:name=".InflectTtsService"

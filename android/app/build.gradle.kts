@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -33,6 +35,38 @@ android {
         }
     }
 
+    // Optional release signing: android/keystore.properties or FASTT_* env vars.
+    // Without them, assembleRelease still builds (unsigned / debug-signed by AGP default).
+    val keystorePropertiesFile = rootProject.file("keystore.properties")
+    val keystoreProperties = Properties()
+    if (keystorePropertiesFile.exists()) {
+        keystorePropertiesFile.inputStream().use { keystoreProperties.load(it) }
+    }
+    fun signingProp(name: String, envName: String): String? =
+        keystoreProperties.getProperty(name)?.takeIf { it.isNotBlank() }
+            ?: System.getenv(envName)?.takeIf { it.isNotBlank() }
+
+    val storeFilePath = signingProp("storeFile", "FASTT_STORE_FILE")
+    val storePassword = signingProp("storePassword", "FASTT_STORE_PASSWORD")
+    val keyAlias = signingProp("keyAlias", "FASTT_KEY_ALIAS")
+    val keyPassword = signingProp("keyPassword", "FASTT_KEY_PASSWORD")
+    val releaseSigningConfigured =
+        !storeFilePath.isNullOrBlank() &&
+            !storePassword.isNullOrBlank() &&
+            !keyAlias.isNullOrBlank() &&
+            !keyPassword.isNullOrBlank()
+
+    if (releaseSigningConfigured) {
+        signingConfigs {
+            create("release") {
+                storeFile = rootProject.file(storeFilePath!!)
+                this.storePassword = storePassword
+                this.keyAlias = keyAlias
+                this.keyPassword = keyPassword
+            }
+        }
+    }
+
     externalNativeBuild {
         cmake {
             path = file("src/main/cpp/CMakeLists.txt")
@@ -50,6 +84,9 @@ android {
         release {
             isMinifyEnabled = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            if (releaseSigningConfigured) {
+                signingConfig = signingConfigs.getByName("release")
+            }
         }
     }
 
