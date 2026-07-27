@@ -19,9 +19,24 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         // ONNX Runtime ships native libs for four ABIs; keeping only these two roughly
-        // halves the APK. Stage 3 (espeak-ng via CMake/NDK) adds `externalNativeBuild` here.
+        // halves the APK. espeak-ng is compiled for the same pair.
         ndk {
             abiFilters += listOf("arm64-v8a", "x86_64")
+        }
+
+        externalNativeBuild {
+            cmake {
+                // No C++ in the espeak-ng subset we build (speechPlayer is excluded), so we
+                // can skip the STL entirely.
+                arguments += listOf("-DANDROID_STL=none")
+            }
+        }
+    }
+
+    externalNativeBuild {
+        cmake {
+            path = file("src/main/cpp/CMakeLists.txt")
+            version = "3.22.1"
         }
     }
 
@@ -50,6 +65,7 @@ android {
     sourceSets {
         getByName("main").java.srcDirs("src/main/kotlin")
         getByName("test").java.srcDirs("src/test/kotlin")
+        getByName("androidTest").java.srcDirs("src/androidTest/kotlin")
     }
 
     testOptions {
@@ -67,4 +83,6 @@ dependencies {
     testImplementation("org.json:json:20240303")
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.9.0")
+    androidTestImplementation("androidx.test:runner:1.6.2")
+    androidTestImplementation("androidx.test.ext:junit:1.2.1")
 }

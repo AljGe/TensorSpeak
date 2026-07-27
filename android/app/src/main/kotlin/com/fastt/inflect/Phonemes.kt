@@ -43,8 +43,9 @@ class PhonemeTokenizer(private val symbols: List<String>) {
 }
 
 /**
- * Text -> IPA. Stage 3 replaces this with a JNI binding to eSpeak-ng compiled through the
- * NDK; until then a fixture-backed implementation keeps the rest of the pipeline runnable.
+ * Text -> IPA. The production implementation is [EspeakPhonemeSource], which runs the
+ * normalizer and the vendored eSpeak-ng; [FixturePhonemeSource] survives for JVM unit tests,
+ * where no native library is loadable.
  */
 interface PhonemeSource {
     fun phonemize(text: String): String
@@ -55,7 +56,7 @@ class FixturePhonemeSource(private val fixtures: Map<String, String>) : PhonemeS
     override fun phonemize(text: String): String =
         fixtures[text.trim()]
             ?: throw IllegalArgumentException(
-                "no fixture for \"$text\" - eSpeak-ng JNI lands in Stage 3"
+                "no fixture for \"$text\" - use EspeakPhonemeSource for arbitrary text"
             )
 
     companion object {

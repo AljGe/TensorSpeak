@@ -1,0 +1,15 @@
+// Stand-in for the autotools/upstream-CMake generated config.h.
+//
+// Upstream generates this from src/libespeak-ng/config.h.in via cmake/config.cmake, which
+// also drags in FetchContent (libsonic) and the data/docs/tests targets. We only need
+// espeak_TextToPhonemes, so everything optional is compiled out.
+#cmakedefine01 HAVE_MKSTEMP
+
+#cmakedefine01 USE_ASYNC
+#cmakedefine01 USE_KLATT
+#cmakedefine01 USE_LIBPCAUDIO
+#cmakedefine01 USE_LIBSONIC
+#cmakedefine01 USE_MBROLA
+#cmakedefine01 USE_SPEECHPLAYER
+
+#define PACKAGE_VERSION "${ESPEAK_NG_VERSION}"

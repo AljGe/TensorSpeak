@@ -3,6 +3,7 @@
 
   android/app/src/main/assets/duration.onnx, decode.onnx   (copied, gitignored)
   android/app/src/main/assets/symbols.json                 (the token id table)
+  android/app/src/main/assets/espeak-ng-data/              (--espeak-data, gitignored)
   android/app/src/test/resources/golden_tokens.json        (frontend fixtures)
 
 The golden fixtures let a JVM unit test prove Phonemes.kt produces exactly the ids the
@@ -12,6 +13,7 @@ Python frontend produces, without needing eSpeak on the JVM side.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import shutil
 import sys
@@ -37,10 +39,74 @@ FIXTURE_SENTENCES = [
 ASSETS = ROOT / "android" / "app" / "src" / "main" / "assets"
 TEST_RESOURCES = ROOT / "android" / "app" / "src" / "test" / "resources"
 
+# The full espeak-ng-data shipped by espeakng-loader is 19 MB, almost all of it dictionaries
+# for languages we never load. These are the entries en-us actually needs. Anything matching
+# a glob here is copied; everything else is dropped.
+ESPEAK_DATA_KEEP = (
+    "phontab",
+    "phonindex",
+    "phondata",
+    "phondata-manifest",
+    "intonations",
+    "en_dict",
+    "lang/gmw/en*",
+    "voices/!v/*",
+)
+
+
+def export_espeak_data(destination: Path) -> None:
+    """Copy the trimmed espeak-ng-data that EspeakNative initializes against.
+
+    Deliberately sourced from espeakng-loader rather than a system/nix espeak-ng: that is the
+    build the Python sandbox phonemizes with (see _configure_espeak in the upstream frontend),
+    so it is the parity reference. The vendored native espeak-ng is pinned to the same 1.52.0.
+    """
+    import espeakng_loader
+
+    source = Path(espeakng_loader.get_data_path())
+    if destination.exists():
+        shutil.rmtree(destination)
+
+    selected: list[Path] = []
+    for pattern in ESPEAK_DATA_KEEP:
+        matches = sorted(path for path in source.glob(pattern) if path.is_file())
+        if not matches:
+            raise SystemExit(f"espeak-ng-data pattern matched nothing: {pattern!r} under {source}")
+        selected.extend(matches)
+
+    manifest = []
+    total = 0
+    for path in selected:
+        relative = path.relative_to(source)
+        target = destination / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(path, target)
+        digest = hashlib.sha256(path.read_bytes()).hexdigest()
+        manifest.append({"path": str(relative), "size": path.stat().st_size, "sha256": digest})
+        total += path.stat().st_size
+
+    (destination / "MANIFEST.json").write_text(
+        json.dumps(
+            {
+                "source": str(source),
+                "espeakng_loader": getattr(espeakng_loader, "__version__", "unknown"),
+                "keep_patterns": list(ESPEAK_DATA_KEEP),
+                "files": manifest,
+            },
+            indent=2,
+        )
+    )
+    print(f"  espeak-ng-data: {len(manifest)} files, {total / 1e6:.1f} MB (from {source})")
+
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--skip-models", action="store_true", help="don't copy the .onnx graphs")
+    ap.add_argument(
+        "--espeak-data",
+        action="store_true",
+        help="also copy the trimmed espeak-ng-data into assets (needed by EspeakPhonemeSource)",
+    )
     args = ap.parse_args()
 
     ASSETS.mkdir(parents=True, exist_ok=True)
@@ -77,6 +143,9 @@ def main() -> None:
             source = MODELS_ROOT / "onnx" / name
             shutil.copyfile(source, ASSETS / name)
             print(f"  copied {name} ({source.stat().st_size / 1e6:.1f} MB)")
+
+    if args.espeak_data:
+        export_espeak_data(ASSETS / "espeak-ng-data")
 
     print(f"\nwrote {ASSETS} and {TEST_RESOURCES}")
 

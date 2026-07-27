@@ -5,4 +5,7 @@
     <string name="ready">Ready.</string>
     <string name="speak">Speak</string>
     <string name="synthesized">Synthesized %1$.2f s of audio in %2$d ms</string>
+    <string name="input_hint">Type something to speak…</string>
+    <string name="synthesis_failed">Synthesis failed: %1$s</string>
+    <string name="tts_engine_label">Inflect</string>
 </resources>

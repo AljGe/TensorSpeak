@@ -15,6 +15,33 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- System-wide voice: selectable in Settings > Accessibility > Text-to-speech. -->
+        <service
+            android:name=".InflectTtsService"
+            android:label="@string/tts_engine_label"
+            android:exported="true"
+            android:directBootAware="false">
+            <intent-filter>
+                <action android:name="android.intent.action.TTS_SERVICE" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+            <meta-data
+                android:name="android.speech.tts"
+                android:resource="@xml/tts_engine" />
+        </service>
+
+        <!-- The engine picker requires an answer to CHECK_TTS_DATA before listing us. -->
+        <activity
+            android:name=".CheckVoiceDataActivity"
+            android:label="@string/tts_engine_label"
+            android:exported="true"
+            android:theme="@android:style/Theme.NoDisplay">
+            <intent-filter>
+                <action android:name="android.speech.tts.engine.CHECK_TTS_DATA" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
     </application>
 
 </manifest>

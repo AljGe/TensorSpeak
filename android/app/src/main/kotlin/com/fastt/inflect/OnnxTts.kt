@@ -148,7 +148,7 @@ class OnnxTts private constructor(
          */
         suspend fun fromAssets(
             context: Context,
-            phonemes: PhonemeSource = FixturePhonemeSource.DEMO,
+            phonemes: PhonemeSource = EspeakPhonemeSource(context),
         ): OnnxTts = withContext(Dispatchers.IO) {
             val assets = context.assets
             val env = OrtEnvironment.getEnvironment()

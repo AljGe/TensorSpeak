@@ -2,14 +2,17 @@ package com.fastt.inflect
 
 import android.os.Bundle
 import android.widget.Button
+import android.widget.EditText
 import android.widget.TextView
 import androidx.activity.ComponentActivity
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.launch
 
 /**
- * Minimal harness: load both graphs, synthesize one fixture sentence, play it.
- * Free-form text arrives in Stage 3 with the eSpeak-ng JNI frontend.
+ * Minimal harness: load both graphs, synthesize whatever is in the text box, play it.
+ *
+ * Also doubles as the engine's `settingsActivity` (see `res/xml/tts_engine.xml`), so it is
+ * the quickest way to confirm the eSpeak-ng frontend handles arbitrary text.
  */
 class MainActivity : ComponentActivity() {
 
@@ -21,8 +24,10 @@ class MainActivity : ComponentActivity() {
         setContentView(R.layout.activity_main)
 
         val status = findViewById<TextView>(R.id.status)
+        val input = findViewById<EditText>(R.id.input)
         val speak = findViewById<Button>(R.id.speak)
         speak.isEnabled = false
+        input.setText(DEMO_TEXT)
 
         lifecycleScope.launch {
             status.text = getString(R.string.loading)
@@ -33,15 +38,24 @@ class MainActivity : ComponentActivity() {
 
         speak.setOnClickListener {
             val engine = tts ?: return@setOnClickListener
+            val text = input.text.toString().trim()
+            if (text.isEmpty()) return@setOnClickListener
             speak.isEnabled = false
             lifecycleScope.launch {
-                val started = System.currentTimeMillis()
-                val waveform = engine.synthesize(DEMO_TEXT)
-                val elapsed = System.currentTimeMillis() - started
-                val seconds = waveform.size.toFloat() / OnnxTts.SAMPLE_RATE
-                status.text = getString(R.string.synthesized, seconds, elapsed)
-                player.play(waveform)
-                speak.isEnabled = true
+                try {
+                    val started = System.currentTimeMillis()
+                    val waveform = engine.synthesize(text)
+                    val elapsed = System.currentTimeMillis() - started
+                    val seconds = waveform.size.toFloat() / OnnxTts.SAMPLE_RATE
+                    status.text = getString(R.string.synthesized, seconds, elapsed)
+                    player.play(waveform)
+                } catch (error: Exception) {
+                    // Most likely a phoneme outside the 178-symbol table; surface it rather
+                    // than letting the activity die on arbitrary input.
+                    status.text = getString(R.string.synthesis_failed, error.message.orEmpty())
+                } finally {
+                    speak.isEnabled = true
+                }
             }
         }
     }
