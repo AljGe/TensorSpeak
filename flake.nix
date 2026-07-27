@@ -1,5 +1,5 @@
 {
-  description = "Inflect-Micro-v2 ONNX TTS: Python sandbox + Android app";
+  description = "Inflect Micro/Nano ONNX TTS: Python sandbox + Android app";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable"; # Or a specific Nixpkgs release

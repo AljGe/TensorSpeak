@@ -4,11 +4,13 @@ Contract (generated into `docs/TENSOR_CONTRACT.md` by scripts/inspect_graphs.py)
 
   duration.onnx
     in : tokens int64[1, text_len], lengths int64[1], length_scale float32[]
-    out: m_p_exp float32[1, 192, mel_len], logs_p_exp float32[1, 192, mel_len],
+    out: m_p_exp float32[1, C, mel_len], logs_p_exp float32[1, C, mel_len],
          y_mask float32[1, 1, mel_len]
   decode.onnx
-    in : m_p_exp, logs_p_exp, y_mask, zp_noise float32[1, 192, mel_len], noise_scale float32[]
+    in : m_p_exp, logs_p_exp, y_mask, zp_noise float32[1, C, mel_len], noise_scale float32[]
     out: waveform float32[1, 1, wav_len]
+
+`C` is `inter_channels` from config.json (192 for Micro, may differ for Nano).
 
 Note that duration expansion (length regulation) happens *inside* duration.onnx - its
 outputs are already at `mel_len`. The caller only has to draw `zp_noise`. This is the single
@@ -25,12 +27,13 @@ import numpy as np
 import onnxruntime as ort
 
 from .frontend import (
-    MODELS_ROOT,
+    DEFAULT_VARIANT,
     SAMPLE_RATE,
     boundary_pause_seconds,
     phonemes_to_tokens,
     split_text,
     text_to_phonemes,
+    variant_root,
 )
 
 PROVIDER_ALIASES = {
@@ -83,13 +86,22 @@ def edge_fade(waveform: np.ndarray, milliseconds: float = 5.0) -> np.ndarray:
 
 
 class InflectPipeline:
-    def __init__(self, models_root: Path = MODELS_ROOT, provider: str = "cpu") -> None:
-        onnx_dir = Path(models_root) / "onnx"
+    def __init__(
+        self,
+        models_root: Path | None = None,
+        provider: str = "cpu",
+        *,
+        variant: str = DEFAULT_VARIANT,
+    ) -> None:
+        root = Path(models_root) if models_root is not None else variant_root(variant)
+        onnx_dir = root / "onnx"
         selected = resolve_provider(provider)
         providers = [selected]
         if selected != "CPUExecutionProvider":
             providers.append("CPUExecutionProvider")
 
+        self.variant = variant
+        self.models_root = root
         self.duration = ort.InferenceSession(str(onnx_dir / "duration.onnx"), providers=providers)
         self.decode = ort.InferenceSession(str(onnx_dir / "decode.onnx"), providers=providers)
 

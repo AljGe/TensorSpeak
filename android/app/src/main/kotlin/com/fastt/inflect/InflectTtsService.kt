@@ -117,10 +117,17 @@ class InflectTtsService : TextToSpeechService() {
 
     @Synchronized
     private fun requireEngine(): OnnxTts {
-        engine?.let { return it }
+        val preferred = ModelPreferences.get(applicationContext)
+        engine?.let { current ->
+            if (current.variant == preferred) return current
+            current.close()
+            engine = null
+        }
         // fromAssets is suspend only because it does file I/O; we are already off the main
         // thread here, so blocking is fine.
-        val created = runBlocking { OnnxTts.fromAssets(applicationContext) }
+        val created = runBlocking {
+            OnnxTts.fromAssets(applicationContext, preferred)
+        }
         engine = created
         return created
     }

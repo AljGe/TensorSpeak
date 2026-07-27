@@ -19,9 +19,23 @@ from pathlib import Path
 
 import numpy as np
 
-MODELS_ROOT = Path(__file__).resolve().parents[2] / "models"
+MODELS_DIR = Path(__file__).resolve().parents[2] / "models"
+DEFAULT_VARIANT = "micro"
+VARIANTS = ("micro", "nano")
+
+# Upstream frontend modules live under models/micro/ (shared by both graph variants).
+FRONTEND_ROOT = MODELS_DIR / DEFAULT_VARIANT
+# Back-compat alias: callers that only need the frontend still point at micro.
+MODELS_ROOT = FRONTEND_ROOT
 
 SAMPLE_RATE = 24_000
+
+
+def variant_root(variant: str = DEFAULT_VARIANT) -> Path:
+    """Return models/<variant>/ for ONNX graphs and upstream parity scripts."""
+    if variant not in VARIANTS:
+        raise ValueError(f"unknown model variant {variant!r}; expected one of {VARIANTS}")
+    return MODELS_DIR / variant
 
 # Pause inserted after a chunk, keyed by its final punctuation mark (seconds).
 BOUNDARY_PAUSES = {
@@ -37,7 +51,7 @@ DEFAULT_PAUSE = 0.08
 _SENTENCE_SPLIT = re.compile(r"(?<=[.!?;:])\s+")
 
 
-def _install_upstream_path(models_root: Path = MODELS_ROOT) -> None:
+def _install_upstream_path(models_root: Path = FRONTEND_ROOT) -> None:
     """Put the downloaded model repo on sys.path so its frontend modules import."""
     if not (models_root / "inflect_vits_frontend.py").exists():
         raise SystemExit(

@@ -1,7 +1,12 @@
-# fastt — on-device TTS from Inflect-Micro-v2-ONNX
+# fastt — on-device TTS from Inflect Micro / Nano ONNX
 
-An Android text-to-speech engine built on [owensong/Inflect-Micro-v2-ONNX](https://huggingface.co/owensong/Inflect-Micro-v2-ONNX):
-a 9.36M-parameter VITS-family model, 24 kHz mono, Apache-2.0.
+An Android text-to-speech engine built on
+[owensong/Inflect-Micro-v2-ONNX](https://huggingface.co/owensong/Inflect-Micro-v2-ONNX)
+(9.36M params) and
+[owensong/Inflect-Nano-v2-ONNX](https://huggingface.co/owensong/Inflect-Nano-v2-ONNX)
+(3.96M params): VITS-family models, 24 kHz mono, Apache-2.0. Both graph pairs ship in the
+APK; pick Nano (smaller/faster) or Micro (default, higher quality) in the harness /
+engine settings.
 
 The project is deliberately split in two, because the ONNX tensor contract has to be pinned
 down before any Kotlin is worth writing:
@@ -19,7 +24,8 @@ Requires [Nix](https://nixos.org/download.html) with flakes and [direnv](https:/
 ```bash
 git submodule update --init --recursive   # vendored eSpeak-ng 1.52.0
 direnv allow          # builds the devenv shell (Python 3.11 + uv, and the Android SDK/NDK)
-python scripts/fetch_model.py     # downloads the graphs into models/, verifies sha256
+python scripts/fetch_model.py             # downloads micro + nano into models/<variant>/, verifies sha256
+# python scripts/fetch_model.py --model nano   # one variant only
 ```
 
 The Android SDK is a multi-GB download. To skip it while working on Stage 1 only:
@@ -31,19 +37,22 @@ INFLECT_ANDROID=0 direnv reload
 ## Stage 1 — Python sandbox
 
 ```bash
-python scripts/inspect_graphs.py    # regenerates docs/TENSOR_CONTRACT.md from the graphs
+python scripts/inspect_graphs.py    # regenerates docs/TENSOR_CONTRACT.md from both variants
 python scripts/synthesize.py --text "Hello world." --output out/sample.wav
-python scripts/parity_check.py      # bit-parity against models/onnx/inference_onnx.py
+python scripts/synthesize.py --model nano --text "Hello world." --output out/nano.wav
+python scripts/parity_check.py              # bit-parity vs micro upstream
+python scripts/parity_check.py --model nano # bit-parity vs nano upstream
 ```
 
 `parity_check.py` is the acceptance test: it runs the upstream reference implementation and
 ours over the same sentences and seeds and asserts the waveforms match. It currently reports
-`max|diff| = 0` on all fixtures.
+`max|diff| = 0` on all fixtures for both variants.
 
 Text→IPA is delegated to the upstream frontend (`inflect_vits_frontend.run_vits_frontend`)
 rather than reimplemented — it is bound to a specific eSpeak-ng build plus a hand-tuned
 override table, and any drift there produces subtly wrong audio. Everything after that
-boundary lives in `src/inflect_sandbox/` and is the spec the Android port follows.
+boundary lives in `src/inflect_sandbox/` and is the spec the Android port follows. The
+frontend is shared; only the ONNX graphs differ per variant (`models/micro/`, `models/nano/`).
 
 ### The pipeline
 
@@ -51,10 +60,12 @@ See [docs/TENSOR_CONTRACT.md](docs/TENSOR_CONTRACT.md), generated from the graph
 
 ```
 text -> eSpeak-ng IPA -> ids + interleaved blanks -> [1, text_len]
-     -> duration.onnx -> m_p_exp, logs_p_exp, y_mask   all [1, 192, mel_len]
+     -> duration.onnx -> m_p_exp, logs_p_exp, y_mask   all [1, C, mel_len]
      -> + zp_noise ~ N(0,1)
      -> decode.onnx -> waveform [1, 1, wav_len] @ 24 kHz
 ```
+
+`C` is `inter_channels`: **192** (Micro) or **128** (Nano).
 
 **Duration expansion happens inside `duration.onnx`** — its outputs are already at `mel_len`.
 There is no length-regulation step to implement by hand; the only thing a caller adds between
@@ -63,22 +74,24 @@ the two graphs is the `zp_noise` draw. This is the single most important fact fo
 ## Stage 2 — Android
 
 ```bash
-python scripts/export_android_assets.py --espeak-data   # graphs + symbols.json + voice data
+python scripts/export_android_assets.py --espeak-data   # both variants + symbols.json + voice data
 python scripts/export_frontend_golden.py                # the 149-row parity corpus
 cd android && ./gradlew :app:assembleDebug :app:testDebugUnitTest
 adb install app/build/outputs/apk/debug/app-debug.apk    # needs a device/emulator
 ```
 
-The debug APK is ~78 MB: 38 MB of uncompressed ONNX graphs, ONNX Runtime's native libraries,
-~0.9 MB of eSpeak-ng voice data and ~1 MB of `libinflect_espeak.so` per ABI. `abiFilters` is
-limited to `arm64-v8a` and `x86_64`.
+The debug APK is ~94 MB: ~54 MB of uncompressed ONNX graphs (Micro ~38 MB + Nano ~16 MB),
+ONNX Runtime's native libraries, ~0.9 MB of eSpeak-ng voice data and ~1 MB of
+`libinflect_espeak.so` per ABI. `abiFilters` is limited to `arm64-v8a` and `x86_64`.
 
 `buildToolsVersion` and `ndkVersion` are pinned in `app/build.gradle.kts` because the nix
 SDK is read-only — without the pins AGP tries to auto-install its own and fails.
 
-`OnnxTts.kt` implements the contract above. `PhonemeTokenizer` is pinned to the Python
-frontend by `PhonemeTokenizerTest`, which compares against golden token arrays exported from
-the sandbox.
+`OnnxTts.kt` implements the contract above and loads `assets/<variant>/{duration,decode}.onnx`.
+The harness spinner (also the engine settings gear) persists Nano vs Micro via
+`ModelPreferences`; `InflectTtsService` reloads when the preference changes.
+`PhonemeTokenizer` is pinned to the Python frontend by `PhonemeTokenizerTest`, which compares
+against golden token arrays exported from the sandbox.
 
 Note that Android's `java.util.Random` is not NumPy's PRNG, so a given seed produces different
 `zp_noise` on the two platforms. Audio is perceptually equivalent but not sample-identical

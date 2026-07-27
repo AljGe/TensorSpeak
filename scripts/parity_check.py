@@ -2,7 +2,8 @@
 """Assert our pipeline matches the upstream reference implementation sample-for-sample.
 
 This is the acceptance test for Stage 1: a self-consistent but subtly wrong pipeline is the
-main risk, and only a direct comparison against `models/onnx/inference_onnx.py` catches it.
+main risk, and only a direct comparison against `models/<variant>/onnx/inference_onnx.py`
+catches it.
 """
 
 from __future__ import annotations
@@ -17,7 +18,7 @@ import numpy as np
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
-from inflect_sandbox.frontend import MODELS_ROOT  # noqa: E402
+from inflect_sandbox.frontend import DEFAULT_VARIANT, VARIANTS, variant_root  # noqa: E402
 from inflect_sandbox.pipeline import InflectPipeline  # noqa: E402
 
 SENTENCES = [
@@ -27,9 +28,9 @@ SENTENCES = [
 ]
 
 
-def load_upstream():
-    """Import models/onnx/inference_onnx.py as a module (it is not importable by name)."""
-    path = MODELS_ROOT / "onnx" / "inference_onnx.py"
+def load_upstream(models_root: Path):
+    """Import models/<variant>/onnx/inference_onnx.py as a module."""
+    path = models_root / "onnx" / "inference_onnx.py"
     spec = importlib.util.spec_from_file_location("upstream_inference_onnx", path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
@@ -38,12 +39,14 @@ def load_upstream():
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("--model", choices=VARIANTS, default=DEFAULT_VARIANT)
     ap.add_argument("--tolerance", type=float, default=1e-6)
     ap.add_argument("--seed", type=int, default=0)
     args = ap.parse_args()
 
-    upstream = load_upstream().InflectONNX(model_dir=MODELS_ROOT, provider="cpu")
-    ours = InflectPipeline(provider="cpu")
+    models_root = variant_root(args.model)
+    upstream = load_upstream(models_root).InflectONNX(model_dir=models_root, provider="cpu")
+    ours = InflectPipeline(provider="cpu", variant=args.model)
 
     failures = []
     for sentence in SENTENCES:
@@ -61,7 +64,10 @@ def main() -> None:
 
     if failures:
         raise SystemExit("PARITY FAILED:\n  " + "\n  ".join(failures))
-    print(f"\nparity ok on {len(SENTENCES)} sentences (tolerance {args.tolerance:.0e})")
+    print(
+        f"\nparity ok on {len(SENTENCES)} sentences "
+        f"(model={args.model}, tolerance {args.tolerance:.0e})"
+    )
 
 
 if __name__ == "__main__":

@@ -2,10 +2,12 @@
 <resources>
     <string name="app_name">Inflect TTS</string>
     <string name="loading">Loading ONNX graphs…</string>
-    <string name="ready">Ready.</string>
+    <string name="ready">Ready (%1$s).</string>
     <string name="speak">Speak</string>
     <string name="synthesized">Synthesized %1$.2f s of audio in %2$d ms</string>
     <string name="input_hint">Type something to speak…</string>
     <string name="synthesis_failed">Synthesis failed: %1$s</string>
     <string name="tts_engine_label">Inflect</string>
+    <string name="model_label">Model</string>
+    <string name="model_loading">Loading %1$s…</string>
 </resources>

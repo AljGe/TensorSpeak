@@ -75,7 +75,7 @@ class EspeakParityTest {
 
     @Test
     fun endToEndSynthesisProducesAudio() = kotlinx.coroutines.runBlocking {
-        OnnxTts.fromAssets(context, phonemes).use { tts ->
+        OnnxTts.fromAssets(context, phonemes = phonemes).use { tts ->
             val waveform = tts.synthesize("Hello world.", seed = 0L)
             assertTrue("expected some audio", waveform.size > OnnxTts.SAMPLE_RATE / 10)
             assertTrue("expected non-silent audio", waveform.any { kotlin.math.abs(it) > 0.01f })

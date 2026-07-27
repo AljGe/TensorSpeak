@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Emit the assets the Android app needs, derived from the verified Python pipeline.
 
-  android/app/src/main/assets/duration.onnx, decode.onnx   (copied, gitignored)
-  android/app/src/main/assets/symbols.json                 (the token id table)
-  android/app/src/main/assets/espeak-ng-data/              (--espeak-data, gitignored)
-  android/app/src/test/resources/golden_tokens.json        (frontend fixtures)
+  android/app/src/main/assets/<variant>/{duration,decode}.onnx  (copied, gitignored)
+  android/app/src/main/assets/symbols.json                      (the token id table)
+  android/app/src/main/assets/espeak-ng-data/                   (--espeak-data, gitignored)
+  android/app/src/test/resources/golden_tokens.json             (frontend fixtures)
 
 The golden fixtures let a JVM unit test prove Phonemes.kt produces exactly the ids the
 Python frontend produces, without needing eSpeak on the JVM side.
@@ -23,11 +23,12 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
 from inflect_sandbox.frontend import (  # noqa: E402
-    MODELS_ROOT,
     SAMPLE_RATE,
+    VARIANTS,
     phonemes_to_tokens,
     symbol_table,
     text_to_phonemes,
+    variant_root,
 )
 
 FIXTURE_SENTENCES = [
@@ -139,10 +140,25 @@ def main() -> None:
     )
 
     if not args.skip_models:
-        for name in ("duration.onnx", "decode.onnx"):
-            source = MODELS_ROOT / "onnx" / name
-            shutil.copyfile(source, ASSETS / name)
-            print(f"  copied {name} ({source.stat().st_size / 1e6:.1f} MB)")
+        # Drop any pre-variant flat graphs left over from older exports.
+        for stale in ("duration.onnx", "decode.onnx"):
+            flat = ASSETS / stale
+            if flat.exists():
+                flat.unlink()
+                print(f"  removed stale flat asset {stale}")
+
+        for variant in VARIANTS:
+            dest_dir = ASSETS / variant
+            dest_dir.mkdir(parents=True, exist_ok=True)
+            onnx_dir = variant_root(variant) / "onnx"
+            for name in ("duration.onnx", "decode.onnx"):
+                source = onnx_dir / name
+                if not source.exists():
+                    raise SystemExit(
+                        f"missing {source} - run scripts/fetch_model.py --model {variant}"
+                    )
+                shutil.copyfile(source, dest_dir / name)
+                print(f"  copied {variant}/{name} ({source.stat().st_size / 1e6:.1f} MB)")
 
     if args.espeak_data:
         export_espeak_data(ASSETS / "espeak-ng-data")

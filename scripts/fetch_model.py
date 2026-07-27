@@ -1,20 +1,25 @@
 #!/usr/bin/env python3
-"""Download the Inflect-Micro-v2 ONNX graphs and reference frontend into models/.
+"""Download Inflect-Micro / Inflect-Nano ONNX graphs into models/<variant>/.
 
-Verifies every downloaded ONNX graph against the repo's own onnx/checksums.sha256.
+Verifies every downloaded ONNX graph against each repo's own onnx/checksums.sha256.
 """
 
 from __future__ import annotations
 
 import argparse
 import hashlib
+import shutil
 import sys
 from pathlib import Path
 
 from huggingface_hub import snapshot_download
 
-REPO_ID = "owensong/Inflect-Micro-v2-ONNX"
-DEST = Path(__file__).resolve().parent.parent / "models"
+MODELS_DIR = Path(__file__).resolve().parent.parent / "models"
+
+VARIANTS = {
+    "micro": "owensong/Inflect-Micro-v2-ONNX",
+    "nano": "owensong/Inflect-Nano-v2-ONNX",
+}
 
 # Graphs + config + the upstream reference implementation we check parity against.
 ALLOW_PATTERNS = [
@@ -73,25 +78,65 @@ def verify(root: Path) -> None:
     print(f"checksums ok ({checked} files verified)")
 
 
+def migrate_flat_layout(models_dir: Path) -> None:
+    """One-time: move a pre-variant flat models/ tree into models/micro/."""
+    flat_marker = models_dir / "onnx" / "duration.onnx"
+    micro_marker = models_dir / "micro" / "onnx" / "duration.onnx"
+    if not flat_marker.exists() or micro_marker.exists():
+        return
+
+    micro = models_dir / "micro"
+    micro.mkdir(parents=True, exist_ok=True)
+    print(f"migrating flat models/ -> {micro}/")
+    for name in (
+        "onnx",
+        "runtime",
+        "config.json",
+        "inflect_vits_frontend.py",
+        "inflect_nano_v2_frontend.py",
+        "LICENSE",
+    ):
+        source = models_dir / name
+        if source.exists():
+            shutil.move(str(source), str(micro / name))
+
+
+def fetch_variant(variant: str, revision: str, models_dir: Path) -> None:
+    repo_id = VARIANTS[variant]
+    dest = models_dir / variant
+    dest.mkdir(parents=True, exist_ok=True)
+    print(f"downloading {repo_id}@{revision} -> {dest}")
+    snapshot_download(
+        repo_id=repo_id,
+        revision=revision,
+        allow_patterns=ALLOW_PATTERNS,
+        local_dir=str(dest),
+    )
+    verify(dest)
+
+    for name in ("onnx/duration.onnx", "onnx/decode.onnx", "config.json"):
+        p = dest / name
+        print(f"  {name}: {p.stat().st_size / 1e6:.2f} MB" if p.exists() else f"  {name}: MISSING")
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument(
+        "--model",
+        choices=["micro", "nano", "all"],
+        default="all",
+        help="which variant to download (default: all)",
+    )
     ap.add_argument("--revision", default="main", help="git revision to pin")
-    ap.add_argument("--dest", type=Path, default=DEST)
+    ap.add_argument("--dest", type=Path, default=MODELS_DIR, help="models/ parent directory")
     args = ap.parse_args()
 
     args.dest.mkdir(parents=True, exist_ok=True)
-    print(f"downloading {REPO_ID}@{args.revision} -> {args.dest}")
-    snapshot_download(
-        repo_id=REPO_ID,
-        revision=args.revision,
-        allow_patterns=ALLOW_PATTERNS,
-        local_dir=str(args.dest),
-    )
-    verify(args.dest)
+    migrate_flat_layout(args.dest)
 
-    for name in ("onnx/duration.onnx", "onnx/decode.onnx", "config.json"):
-        p = args.dest / name
-        print(f"  {name}: {p.stat().st_size / 1e6:.2f} MB" if p.exists() else f"  {name}: MISSING")
+    selected = list(VARIANTS) if args.model == "all" else [args.model]
+    for variant in selected:
+        fetch_variant(variant, args.revision, args.dest)
 
 
 if __name__ == "__main__":

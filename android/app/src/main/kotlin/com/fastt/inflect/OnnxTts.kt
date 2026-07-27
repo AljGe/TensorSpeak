@@ -17,10 +17,13 @@ import kotlinx.coroutines.withContext
  * Contract mirrored from `docs/TENSOR_CONTRACT.md`:
  *
  *   duration.onnx: tokens int64[1, text_len], lengths int64[1], length_scale float32[]
- *               -> m_p_exp float32[1, 192, mel_len], logs_p_exp [1, 192, mel_len],
+ *               -> m_p_exp float32[1, C, mel_len], logs_p_exp [1, C, mel_len],
  *                  y_mask float32[1, 1, mel_len]
- *   decode.onnx : m_p_exp, logs_p_exp, y_mask, zp_noise float32[1, 192, mel_len],
+ *   decode.onnx : m_p_exp, logs_p_exp, y_mask, zp_noise float32[1, C, mel_len],
  *                 noise_scale float32[] -> waveform float32[1, 1, wav_len]
+ *
+ * `C` is inter_channels (192 Micro / 128 Nano). Noise shape is taken from the duration
+ * outputs so both variants share this class.
  *
  * Duration expansion happens *inside* duration.onnx - its outputs are already at `mel_len`,
  * so there is no length-regulation step to implement here. The only thing this class adds
@@ -32,6 +35,7 @@ class OnnxTts private constructor(
     private val decode: OrtSession,
     private val tokenizer: PhonemeTokenizer,
     private val phonemes: PhonemeSource,
+    val variant: ModelVariant,
 ) : Closeable {
 
     /**
@@ -80,7 +84,7 @@ class OnnxTts private constructor(
                 val logsP = durationResult.get(1) as OnnxTensor
                 val yMask = durationResult.get(2) as OnnxTensor
 
-                val shape = mP.info.shape // [1, 192, mel_len]
+                val shape = mP.info.shape // [1, C, mel_len]
                 val elements = shape.fold(1L) { acc, dim -> acc * dim }.toInt()
                 val noise = standardNormal(elements, seed)
 
@@ -143,11 +147,13 @@ class OnnxTts private constructor(
         const val SAMPLE_RATE = 24_000
 
         /**
-         * Reads both graphs and the symbol table out of assets. The graphs are stored
-         * uncompressed (see `noCompress += "onnx"`), so this is a straight read.
+         * Reads both graphs for [variant] and the shared symbol table out of assets.
+         * The graphs are stored uncompressed (see `noCompress += "onnx"`), so this is a
+         * straight read.
          */
         suspend fun fromAssets(
             context: Context,
+            variant: ModelVariant = ModelPreferences.get(context),
             phonemes: PhonemeSource = EspeakPhonemeSource(context),
         ): OnnxTts = withContext(Dispatchers.IO) {
             val assets = context.assets
@@ -156,12 +162,19 @@ class OnnxTts private constructor(
                 setIntraOpNumThreads(Runtime.getRuntime().availableProcessors().coerceAtMost(4))
             }
 
-            val duration = env.createSession(assets.open("duration.onnx").readBytes(), options)
-            val decode = env.createSession(assets.open("decode.onnx").readBytes(), options)
+            val prefix = variant.id
+            val duration = env.createSession(
+                assets.open("$prefix/duration.onnx").readBytes(),
+                options,
+            )
+            val decode = env.createSession(
+                assets.open("$prefix/decode.onnx").readBytes(),
+                options,
+            )
             val tokenizer = PhonemeTokenizer.fromJson(
                 assets.open("symbols.json").bufferedReader().use { it.readText() }
             )
-            OnnxTts(env, duration, decode, tokenizer, phonemes)
+            OnnxTts(env, duration, decode, tokenizer, phonemes, variant)
         }
     }
 }

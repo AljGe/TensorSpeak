@@ -67,13 +67,13 @@ in {
   '';
 
   enterShell = ''
-    echo "--- Inflect-Micro-v2 ONNX TTS ---"
+    echo "--- Inflect Micro/Nano ONNX TTS ---"
     check-env
     echo ""
-    echo "  python scripts/fetch_model.py      # download ONNX graphs -> models/"
+    echo "  python scripts/fetch_model.py      # download micro+nano -> models/<variant>/"
     echo "  python scripts/inspect_graphs.py   # -> docs/TENSOR_CONTRACT.md"
     echo "  python scripts/synthesize.py --text 'Hello world.' --output out/sample.wav"
-    echo "  python scripts/parity_check.py     # bit-parity vs upstream reference"
+    echo "  python scripts/parity_check.py [--model nano]  # bit-parity vs upstream"
     ${lib.optionalString withAndroid ''
       echo "  (cd android && ./gradlew :app:assembleDebug :app:testDebugUnitTest)"
     ''}
