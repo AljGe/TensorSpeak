@@ -1,13 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Inflect TTS</string>
+    <string name="app_name">TensorSpeak</string>
     <string name="loading">Loading ONNX graphs…</string>
     <string name="ready">Ready (%1$s).</string>
     <string name="speak">Speak</string>
     <string name="synthesized">Synthesized %1$.2f s of audio in %2$d ms</string>
     <string name="input_hint">Type something to speak…</string>
     <string name="synthesis_failed">Synthesis failed: %1$s</string>
-    <string name="tts_engine_label">Inflect</string>
+    <string name="tts_engine_label">TensorSpeak</string>
     <string name="model_label">Model</string>
     <string name="model_loading">Loading %1$s…</string>
     <string name="open_source_licenses">Open source licenses</string>

@@ -1,4 +1,4 @@
-package com.fastt.inflect
+package com.github.aljge.tensorspeak
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -12,7 +12,7 @@ import org.junit.runner.RunWith
  * The acceptance test for the on-device frontend: every row of the golden corpus must
  * phonemize to exactly the IPA the Python sandbox produced, and tokenize to the same ids.
  *
- * This needs real hardware (it loads `libinflect_espeak.so`), so it lives in `androidTest`.
+ * This needs real hardware (it loads `libtensorspeak_espeak.so`), so it lives in `androidTest`.
  * The normalizer half is separately covered on the JVM by `TextNormalizerTest`.
  *
  * Run with: `./gradlew :app:connectedDebugAndroidTest` (a device or emulator must be attached).

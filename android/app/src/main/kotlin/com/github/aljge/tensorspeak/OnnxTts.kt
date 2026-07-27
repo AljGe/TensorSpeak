@@ -1,4 +1,4 @@
-package com.fastt.inflect
+package com.github.aljge.tensorspeak
 
 import ai.onnxruntime.OnnxTensor
 import ai.onnxruntime.OrtEnvironment

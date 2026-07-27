@@ -1,7 +1,7 @@
 # Third-party notices
 
 This file lists third-party software and models redistributed with or linked into
-**fastt** (the Android APK and related tooling). The application itself is licensed
+**TensorSpeak** (the Android APK and related tooling). The application itself is licensed
 under the GNU General Public License v3.0 or later — see [LICENSE](LICENSE).
 
 ---
@@ -62,8 +62,8 @@ SOFTWARE.
 - **License:** GNU General Public License v3.0 or later
 - **Copyright:** Copyright (C) eSpeak-ng contributors
 - **Path:** `android/app/src/main/cpp/espeak-ng`
-- **Used as:** Text→IPA phonemization via JNI (`libinflect_espeak.so`). Linking this
-  library is why the fastt application is distributed under GPL-3.0-or-later.
+- **Used as:** Text→IPA phonemization via JNI (`libtensorspeak_espeak.so`). Linking this
+  library is why the TensorSpeak application is distributed under GPL-3.0-or-later.
 - **Additional notices in the submodule:** `COPYING`, `COPYING.APACHE`,
   `COPYING.BSD2`, `COPYING.UCD`, and `src/ucd-tools/COPYING` (Unicode Character
   Database tools).

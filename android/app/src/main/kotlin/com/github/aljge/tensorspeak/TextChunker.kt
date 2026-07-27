@@ -1,4 +1,4 @@
-package com.fastt.inflect
+package com.github.aljge.tensorspeak
 
 /**
  * Kotlin port of `split_text` and `boundary_pause_seconds` from

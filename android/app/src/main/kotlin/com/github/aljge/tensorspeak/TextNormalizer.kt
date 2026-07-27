@@ -1,4 +1,4 @@
-package com.fastt.inflect
+package com.github.aljge.tensorspeak
 
 /**
  * Kotlin port of `normalize_text` from the model repo's `inflect_nano_v2_frontend.py`.

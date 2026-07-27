@@ -1,10 +1,10 @@
-package com.fastt.inflect
+package com.github.aljge.tensorspeak
 
 import android.content.Context
 
 /** Persists the selected [ModelVariant] for the harness and the system TTS service. */
 object ModelPreferences {
-    private const val PREFS = "inflect_tts"
+    private const val PREFS = "tensorspeak_tts"
     private const val KEY_VARIANT = "model_variant"
 
     fun get(context: Context): ModelVariant {

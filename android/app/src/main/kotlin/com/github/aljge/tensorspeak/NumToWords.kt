@@ -1,4 +1,4 @@
-package com.fastt.inflect
+package com.github.aljge.tensorspeak
 
 /**
  * The slice of `num2words` that [TextNormalizer] actually reaches: English cardinals and

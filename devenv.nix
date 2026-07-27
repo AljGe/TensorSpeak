@@ -67,7 +67,7 @@ in {
   '';
 
   enterShell = ''
-    echo "--- Inflect Micro/Nano ONNX TTS ---"
+    echo "--- TensorSpeak (Inflect Micro/Nano ONNX) ---"
     check-env
     echo ""
     echo "  python scripts/fetch_model.py      # download micro+nano -> models/<variant>/"

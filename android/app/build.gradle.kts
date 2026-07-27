@@ -6,14 +6,14 @@ plugins {
 }
 
 android {
-    namespace = "com.fastt.inflect"
+    namespace = "com.github.aljge.tensorspeak"
     compileSdk = 35
     // Pinned: the nix SDK is read-only, so AGP must not try to auto-install a different one.
     buildToolsVersion = "35.0.0"
     ndkVersion = "26.1.10909125"
 
     defaultConfig {
-        applicationId = "com.fastt.inflect"
+        applicationId = "com.github.aljge.tensorspeak"
         minSdk = 26
         targetSdk = 35
         versionCode = 1
@@ -35,7 +35,7 @@ android {
         }
     }
 
-    // Optional release signing: android/keystore.properties or FASTT_* env vars.
+    // Optional release signing: android/keystore.properties or TENSORSPEAK_* env vars.
     // Without them, assembleRelease still builds (unsigned / debug-signed by AGP default).
     val keystorePropertiesFile = rootProject.file("keystore.properties")
     val keystoreProperties = Properties()
@@ -46,10 +46,10 @@ android {
         keystoreProperties.getProperty(name)?.takeIf { it.isNotBlank() }
             ?: System.getenv(envName)?.takeIf { it.isNotBlank() }
 
-    val storeFilePath = signingProp("storeFile", "FASTT_STORE_FILE")
-    val storePassword = signingProp("storePassword", "FASTT_STORE_PASSWORD")
-    val keyAlias = signingProp("keyAlias", "FASTT_KEY_ALIAS")
-    val keyPassword = signingProp("keyPassword", "FASTT_KEY_PASSWORD")
+    val storeFilePath = signingProp("storeFile", "TENSORSPEAK_STORE_FILE")
+    val storePassword = signingProp("storePassword", "TENSORSPEAK_STORE_PASSWORD")
+    val keyAlias = signingProp("keyAlias", "TENSORSPEAK_KEY_ALIAS")
+    val keyPassword = signingProp("keyPassword", "TENSORSPEAK_KEY_PASSWORD")
     val releaseSigningConfigured =
         !storeFilePath.isNullOrBlank() &&
             !storePassword.isNullOrBlank() &&

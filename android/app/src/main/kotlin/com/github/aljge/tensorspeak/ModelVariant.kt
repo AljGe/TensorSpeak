@@ -1,4 +1,4 @@
-package com.fastt.inflect
+package com.github.aljge.tensorspeak
 
 /**
  * Which Inflect ONNX graph pair to load from assets.

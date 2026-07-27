@@ -1,4 +1,4 @@
-package com.fastt.inflect
+package com.github.aljge.tensorspeak
 
 import android.media.AudioFormat
 import android.speech.tts.SynthesisCallback
@@ -16,7 +16,7 @@ import kotlinx.coroutines.runBlocking
  * to block until the audio has been handed over, which is why this uses `runBlocking` rather
  * than a scope of its own.
  */
-class InflectTtsService : TextToSpeechService() {
+class TensorSpeakTtsService : TextToSpeechService() {
 
     private var engine: OnnxTts? = null
 
@@ -144,7 +144,7 @@ class InflectTtsService : TextToSpeechService() {
         lang.equals("eng", ignoreCase = true) || lang.equals("en", ignoreCase = true)
 
     private companion object {
-        const val TAG = "InflectTtsService"
+        const val TAG = "TensorSpeakTtsService"
         const val BYTES_PER_SAMPLE = 2
         const val MIN_SPEED = 0.5f
         const val MAX_SPEED = 2.0f

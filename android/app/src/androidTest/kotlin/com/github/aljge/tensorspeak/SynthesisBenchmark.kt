@@ -1,4 +1,4 @@
-package com.fastt.inflect
+package com.github.aljge.tensorspeak
 
 import android.util.Log
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -24,8 +24,8 @@ import org.junit.runner.RunWith
  *
  * Run with:
  *   ./gradlew :app:installDebug :app:installDebugAndroidTest
- *   adb shell am instrument -w -e class com.fastt.inflect.SynthesisBenchmark \
- *       com.fastt.inflect.test/androidx.test.runner.AndroidJUnitRunner
+ *   adb shell am instrument -w -e class com.github.aljge.tensorspeak.SynthesisBenchmark \
+ *       com.github.aljge.tensorspeak.test/androidx.test.runner.AndroidJUnitRunner
  */
 @RunWith(AndroidJUnit4::class)
 class SynthesisBenchmark {

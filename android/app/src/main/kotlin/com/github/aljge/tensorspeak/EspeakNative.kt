@@ -1,10 +1,10 @@
-package com.fastt.inflect
+package com.github.aljge.tensorspeak
 
 /**
  * Copyright (C) 2026 AljGe
  * SPDX-License-Identifier: GPL-3.0-or-later
  *
- * Thin, serialized wrapper around `libinflect_espeak.so`.
+ * Thin, serialized wrapper around `libtensorspeak_espeak.so`.
  *
  * eSpeak-ng keeps its translator state in globals, so [textToPhonemes] is not reentrant -
  * every entry point here is `synchronized` on this object. Phonemization of a sentence is
@@ -32,7 +32,7 @@ internal object EspeakNative {
     @Synchronized
     fun ensureInitialized(dataPath: String) {
         if (initialized) return
-        System.loadLibrary("inflect_espeak")
+        System.loadLibrary("tensorspeak_espeak")
         val sampleRate = nativeInit(dataPath)
         check(sampleRate > 0) { "espeak_Initialize failed for data path $dataPath" }
         initialized = true

@@ -1,4 +1,4 @@
-package com.fastt.inflect
+package com.github.aljge.tensorspeak
 
 import org.json.JSONArray
 import org.junit.Assert.assertEquals

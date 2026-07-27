@@ -24,7 +24,7 @@
 
         <!-- System-wide voice: selectable in Settings > Accessibility > Text-to-speech. -->
         <service
-            android:name=".InflectTtsService"
+            android:name=".TensorSpeakTtsService"
             android:label="@string/tts_engine_label"
             android:exported="true"
             android:directBootAware="false">

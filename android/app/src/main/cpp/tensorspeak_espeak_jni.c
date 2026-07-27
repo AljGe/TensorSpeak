@@ -24,7 +24,7 @@
 #include <android/log.h>
 #include <espeak-ng/speak_lib.h>
 
-#define LOG_TAG "InflectEspeak"
+#define LOG_TAG "TensorSpeakEspeak"
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
 
 // Matches phonemizer's literal constants rather than re-deriving them from the enum.
@@ -58,7 +58,7 @@ static int buffer_append(str_buffer *buffer, const char *text, size_t length) {
 }
 
 JNIEXPORT jint JNICALL
-Java_com_fastt_inflect_EspeakNative_nativeInit(JNIEnv *env, jobject self, jstring data_path) {
+Java_com_github_aljge_tensorspeak_EspeakNative_nativeInit(JNIEnv *env, jobject self, jstring data_path) {
 	(void) self;
 	const char *path = (*env)->GetStringUTFChars(env, data_path, NULL);
 	if (path == NULL) {
@@ -83,7 +83,7 @@ Java_com_fastt_inflect_EspeakNative_nativeInit(JNIEnv *env, jobject self, jstrin
 }
 
 JNIEXPORT jstring JNICALL
-Java_com_fastt_inflect_EspeakNative_nativeTextToPhonemes(JNIEnv *env, jobject self, jstring text) {
+Java_com_github_aljge_tensorspeak_EspeakNative_nativeTextToPhonemes(JNIEnv *env, jobject self, jstring text) {
 	(void) self;
 	const char *input = (*env)->GetStringUTFChars(env, text, NULL);
 	if (input == NULL) {
@@ -123,7 +123,7 @@ Java_com_fastt_inflect_EspeakNative_nativeTextToPhonemes(JNIEnv *env, jobject se
 }
 
 JNIEXPORT void JNICALL
-Java_com_fastt_inflect_EspeakNative_nativeTerminate(JNIEnv *env, jobject self) {
+Java_com_github_aljge_tensorspeak_EspeakNative_nativeTerminate(JNIEnv *env, jobject self) {
 	(void) env;
 	(void) self;
 	espeak_Terminate();

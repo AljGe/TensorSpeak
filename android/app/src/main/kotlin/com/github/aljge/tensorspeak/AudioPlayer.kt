@@ -1,4 +1,4 @@
-package com.fastt.inflect
+package com.github.aljge.tensorspeak
 
 import android.media.AudioAttributes
 import android.media.AudioFormat

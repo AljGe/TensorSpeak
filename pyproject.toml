@@ -1,7 +1,7 @@
 [project]
 name = "inflect-sandbox"
 version = "0.1.0"
-description = "Desktop prototyping sandbox for the Inflect Micro/Nano two-stage ONNX TTS pipeline"
+description = "TensorSpeak Python sandbox for the Inflect Micro/Nano two-stage ONNX TTS pipeline"
 requires-python = ">=3.11,<3.12"
 license = "GPL-3.0-or-later"
 

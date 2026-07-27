@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Referenced from the `android.speech.tts` meta-data on InflectTtsService. Without it the
+  Referenced from the `android.speech.tts` meta-data on TensorSpeakTtsService. Without it the
   engine does not show up in Settings > Accessibility > Text-to-speech.
 
   `settingsActivity` is what the gear icon next to the engine opens; MainActivity doubles as
@@ -8,4 +8,4 @@
   framework finds through its intent filter rather than through this file.
 -->
 <tts-engine xmlns:android="http://schemas.android.com/apk/res/android"
-    android:settingsActivity="com.fastt.inflect.MainActivity" />
+    android:settingsActivity="com.github.aljge.tensorspeak.MainActivity" />

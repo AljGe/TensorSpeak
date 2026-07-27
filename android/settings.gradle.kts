@@ -14,5 +14,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "inflect"
+rootProject.name = "tensorspeak"
 include(":app")

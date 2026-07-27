@@ -1,4 +1,4 @@
-# fastt — on-device TTS from Inflect Micro / Nano ONNX
+# TensorSpeak — on-device TTS from Inflect Micro / Nano ONNX
 
 An Android text-to-speech engine built on
 [owensong/Inflect-Micro-v2-ONNX](https://huggingface.co/owensong/Inflect-Micro-v2-ONNX)
@@ -82,14 +82,14 @@ adb install app/build/outputs/apk/debug/app-debug.apk    # needs a device/emulat
 
 The debug APK is ~94 MB: ~54 MB of uncompressed ONNX graphs (Micro ~38 MB + Nano ~16 MB),
 ONNX Runtime's native libraries, ~0.9 MB of eSpeak-ng voice data and ~1 MB of
-`libinflect_espeak.so` per ABI. `abiFilters` is limited to `arm64-v8a` and `x86_64`.
+`libtensorspeak_espeak.so` per ABI. `abiFilters` is limited to `arm64-v8a` and `x86_64`.
 
 `buildToolsVersion` and `ndkVersion` are pinned in `app/build.gradle.kts` because the nix
 SDK is read-only — without the pins AGP tries to auto-install its own and fails.
 
 `OnnxTts.kt` implements the contract above and loads `assets/<variant>/{duration,decode}.onnx`.
 The harness spinner (also the engine settings gear) persists Nano vs Micro via
-`ModelPreferences`; `InflectTtsService` reloads when the preference changes.
+`ModelPreferences`; `TensorSpeakTtsService` reloads when the preference changes.
 `PhonemeTokenizer` is pinned to the Python frontend by `PhonemeTokenizerTest`, which compares
 against golden token arrays exported from the sandbox.
 
@@ -101,8 +101,8 @@ across Python and Android — only the graphs are shared. Parity is therefore as
 ## Stage 3 — on-device frontend and system voice
 
 `EspeakPhonemeSource` replaces the fixture stub, so the app speaks arbitrary text, and
-`InflectTtsService` exposes the engine to every app on the device (Settings → Accessibility →
-Text-to-speech → Inflect).
+`TensorSpeakTtsService` exposes the engine to every app on the device (Settings → Accessibility →
+Text-to-speech → TensorSpeak).
 
 Matching the sandbox takes three layers, not just "call eSpeak" — the Python path runs a
 regex normalizer *and* phonemizer's own punctuation handling around the engine:
@@ -162,17 +162,17 @@ python scripts/export_android_assets.py --espeak-data
 2. Optional signing — create `android/keystore.properties` (gitignored) **or** set env vars:
 
 ```properties
-storeFile=/absolute/path/to/fastt-release.jks
+storeFile=/absolute/path/to/tensorspeak-release.jks
 storePassword=...
-keyAlias=fastt
+keyAlias=tensorspeak
 keyPassword=...
 ```
 
 ```bash
-export FASTT_STORE_FILE=/absolute/path/to/fastt-release.jks
-export FASTT_STORE_PASSWORD=...
-export FASTT_KEY_ALIAS=fastt
-export FASTT_KEY_PASSWORD=...
+export TENSORSPEAK_STORE_FILE=/absolute/path/to/tensorspeak-release.jks
+export TENSORSPEAK_STORE_PASSWORD=...
+export TENSORSPEAK_KEY_ALIAS=tensorspeak
+export TENSORSPEAK_KEY_PASSWORD=...
 ```
 
 3. Build:
@@ -194,7 +194,7 @@ Without keystore props/env, the release build still completes but is not release
 
 ## License
 
-**fastt** is licensed under the [GNU General Public License v3.0 or later](LICENSE)
+**TensorSpeak** is licensed under the [GNU General Public License v3.0 or later](LICENSE)
 (Copyright (C) 2026 AljGe). The project links [eSpeak-ng](https://github.com/espeak-ng/espeak-ng)
 (GPL-3.0), so the application is distributed under GPL-3.0-or-later.
 

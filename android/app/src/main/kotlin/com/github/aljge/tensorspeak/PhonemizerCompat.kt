@@ -1,4 +1,4 @@
-package com.fastt.inflect
+package com.github.aljge.tensorspeak
 
 /**
  * Kotlin port of the parts of `phonemizer` that sit around eSpeak-ng.
