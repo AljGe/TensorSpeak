@@ -1,4 +1,4 @@
-# TensorSpeak — on-device TTS from Inflect Micro / Nano ONNX
+# TensorSpeak - on-device TTS from Inflect Micro / Nano ONNX
 
 An Android text-to-speech engine built on
 [owensong/Inflect-Micro-v2-ONNX](https://huggingface.co/owensong/Inflect-Micro-v2-ONNX)
@@ -13,8 +13,8 @@ down before any Kotlin is worth writing:
 
 | Stage | Where | Status |
 | --- | --- | --- |
-| 1. Python sandbox — prove the pipeline, document the contract | `src/`, `scripts/` | done, bit-exact vs upstream |
-| 2. Android skeleton — same pipeline on ONNX Runtime Android | `android/` | builds; unit tests green |
+| 1. Python sandbox - prove the pipeline, document the contract | `src/`, `scripts/` | done, bit-exact vs upstream |
+| 2. Android skeleton - same pipeline on ONNX Runtime Android | `android/` | builds; unit tests green |
 | 3. eSpeak-ng via NDK/JNI + `TextToSpeechService` | `android/app/src/main/cpp/` | builds; on-device parity test not yet executed |
 
 ## Setup
@@ -34,7 +34,7 @@ The Android SDK is a multi-GB download. To skip it while working on Stage 1 only
 INFLECT_ANDROID=0 direnv reload
 ```
 
-## Stage 1 — Python sandbox
+## Stage 1 - Python sandbox
 
 ```bash
 python scripts/inspect_graphs.py    # regenerates docs/TENSOR_CONTRACT.md from both variants
@@ -48,8 +48,8 @@ python scripts/parity_check.py --model nano # bit-parity vs nano upstream
 ours over the same sentences and seeds and asserts the waveforms match. It currently reports
 `max|diff| = 0` on all fixtures for both variants.
 
-Text→IPA is delegated to the upstream frontend (`inflect_vits_frontend.run_vits_frontend`)
-rather than reimplemented — it is bound to a specific eSpeak-ng build plus a hand-tuned
+Text->IPA is delegated to the upstream frontend (`inflect_vits_frontend.run_vits_frontend`)
+rather than reimplemented - it is bound to a specific eSpeak-ng build plus a hand-tuned
 override table, and any drift there produces subtly wrong audio. Everything after that
 boundary lives in `src/inflect_sandbox/` and is the spec the Android port follows. The
 frontend is shared; only the ONNX graphs differ per variant (`models/micro/`, `models/nano/`).
@@ -67,11 +67,11 @@ text -> eSpeak-ng IPA -> ids + interleaved blanks -> [1, text_len]
 
 `C` is `inter_channels`: **192** (Micro) or **128** (Nano).
 
-**Duration expansion happens inside `duration.onnx`** — its outputs are already at `mel_len`.
+**Duration expansion happens inside `duration.onnx`** - its outputs are already at `mel_len`.
 There is no length-regulation step to implement by hand; the only thing a caller adds between
 the two graphs is the `zp_noise` draw. This is the single most important fact for porting.
 
-## Stage 2 — Android
+## Stage 2 - Android
 
 ```bash
 python scripts/export_android_assets.py --espeak-data   # both variants + symbols.json + voice data
@@ -85,7 +85,7 @@ ONNX Runtime's native libraries, ~0.9 MB of eSpeak-ng voice data and ~1 MB of
 `libtensorspeak_espeak.so` per ABI. `abiFilters` is limited to `arm64-v8a` and `x86_64`.
 
 `buildToolsVersion` and `ndkVersion` are pinned in `app/build.gradle.kts` because the nix
-SDK is read-only — without the pins AGP tries to auto-install its own and fails.
+SDK is read-only - without the pins AGP tries to auto-install its own and fails.
 
 `OnnxTts.kt` implements the contract above and loads `assets/<variant>/{duration,decode}.onnx`.
 The harness spinner (also the engine settings gear) persists Nano vs Micro via
@@ -95,26 +95,26 @@ against golden token arrays exported from the sandbox.
 
 Note that Android's `java.util.Random` is not NumPy's PRNG, so a given seed produces different
 `zp_noise` on the two platforms. Audio is perceptually equivalent but not sample-identical
-across Python and Android — only the graphs are shared. Parity is therefore asserted on
+across Python and Android - only the graphs are shared. Parity is therefore asserted on
 **phonemes and token ids**, never on waveforms.
 
-## Stage 3 — on-device frontend and system voice
+## Stage 3 - on-device frontend and system voice
 
 `EspeakPhonemeSource` replaces the fixture stub, so the app speaks arbitrary text, and
-`TensorSpeakTtsService` exposes the engine to every app on the device (Settings → Accessibility →
-Text-to-speech → TensorSpeak).
+`TensorSpeakTtsService` exposes the engine to every app on the device (Settings -> Accessibility ->
+Text-to-speech -> TensorSpeak).
 
-Matching the sandbox takes three layers, not just "call eSpeak" — the Python path runs a
+Matching the sandbox takes three layers, not just "call eSpeak" - the Python path runs a
 regex normalizer *and* phonemizer's own punctuation handling around the engine:
 
 | Layer | Python | Kotlin |
 | --- | --- | --- |
 | Text normalization (money, dates, times, ordinals, `num2words`) | `inflect_nano_v2_frontend.normalize_text` | `TextNormalizer.kt` + `NumToWords.kt` |
 | Punctuation preserve/restore, per-word postprocess | `phonemizer` 3.x | `PhonemizerCompat.kt` |
-| Text → IPA | espeak-ng 1.52.0 via `espeakng-loader` | vendored espeak-ng 1.52.0 via JNI |
+| Text -> IPA | espeak-ng 1.52.0 via `espeakng-loader` | vendored espeak-ng 1.52.0 via JNI |
 
 eSpeak-ng is a **git submodule** at `android/app/src/main/cpp/espeak-ng`, pinned to `1.52.0`
-— the same version `espeakng-loader` ships, which is what the sandbox actually phonemizes
+- the same version `espeakng-loader` ships, which is what the sandbox actually phonemizes
 with. `cpp/CMakeLists.txt` deliberately does not use the upstream CMake (it fetches libsonic
 over the network and builds the binary, dictionaries, docs and tests); it compiles
 `libespeak-ng` and `ucd-tools` only, with async/klatt/speechPlayer/mbrola/sonic/pcaudio off.
@@ -137,18 +137,18 @@ cd android && ./gradlew :app:testDebugUnitTest :app:assembleDebug :app:assembleD
 | --- | --- | --- |
 | `TextNormalizerTest` | the normalizer + `num2words` port, all 149 rows | JVM ✅ |
 | `check_frontend_compat.py` | the punctuation/postprocess algorithm and the trimmed voice data, all 149 rows | host ✅ |
-| `EspeakParityTest` | the Kotlin transliteration and the JNI marshalling end to end | device ⚠️ |
+| `EspeakParityTest` | the Kotlin transliteration and the JNI marshalling end to end | device warning |
 
 `check_frontend_compat.py` transliterates `PhonemizerCompat.kt` back into Python and drives
-it through the raw `espeak_TextToPhonemes` C API against the trimmed asset data — the exact
-call the JNI shim makes — so most of the device test's coverage is available on the host. It
+it through the raw `espeak_TextToPhonemes` C API against the trimmed asset data - the exact
+call the JNI shim makes - so most of the device test's coverage is available on the host. It
 currently reports **149/149 rows match**.
 
 **`EspeakParityTest` has not been executed.** It compiles
 (`:app:assembleDebugAndroidTest` succeeds) but `devenv.nix` sets `emulator.enable = false` /
 `systemImages.enable = false` and no device is attached, so nothing has run
 `./gradlew :app:connectedDebugAndroidTest`. Until it does, the Kotlin-specific half of the
-port — Java vs Python regex semantics in particular — is argued for, not demonstrated.
+port - Java vs Python regex semantics in particular - is argued for, not demonstrated.
 
 ## Building a release APK
 
@@ -159,7 +159,7 @@ python scripts/fetch_model.py
 python scripts/export_android_assets.py --espeak-data
 ```
 
-2. Optional signing — create `android/keystore.properties` (gitignored) **or** set env vars:
+2. Optional signing - create `android/keystore.properties` (gitignored) **or** set env vars:
 
 ```properties
 storeFile=/absolute/path/to/tensorspeak-release.jks
