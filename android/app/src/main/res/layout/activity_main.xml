@@ -26,6 +26,19 @@
         android:layout_height="wrap_content"
         android:layout_marginBottom="16dp" />
 
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="4dp"
+        android:text="@string/quality_label"
+        android:textSize="14sp" />
+
+    <Spinner
+        android:id="@+id/quality"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="16dp" />
+
     <EditText
         android:id="@+id/input"
         android:layout_width="match_parent"

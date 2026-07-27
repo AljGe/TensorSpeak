@@ -6,6 +6,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import kotlinx.coroutines.runBlocking
 import org.junit.Test
 import org.junit.runner.RunWith
+import kotlin.math.ceil
 
 /**
  * Measures what the engine actually costs on device, across both graph variants and both
@@ -51,6 +52,14 @@ class SynthesisBenchmark {
             "is still being decoded, and the pauses land where a speaker would breathe.",
     )
 
+    private val listeningCorpus = listOf(
+        "Dr. Chen paid $1,234.50 on 7/4/2026 at 3:05 PM.",
+        "Bring pens, paper, etc. tomorrow.",
+        "He lives in the U.S.A. now.",
+        "The fluorescent light flickered in Saskatchewan.",
+        "A long sentence with many commas, pauses, and clauses should still start quickly.",
+    )
+
     @Test
     fun benchmarkVariantsAndProviders() {
         Log.i(TAG, "=".repeat(78))
@@ -58,6 +67,7 @@ class SynthesisBenchmark {
             "cores=${Runtime.getRuntime().availableProcessors()}")
         Log.i(TAG, "=".repeat(78))
 
+        Log.i(TAG, "cpuThreadsDefault=${OnnxTts.defaultCpuThreads()}")
         for (variant in ModelVariant.entries) {
             for (provider in listOf(OnnxTts.Provider.XNNPACK, OnnxTts.Provider.CPU)) {
                 runOne(variant, provider)
@@ -74,10 +84,12 @@ class SynthesisBenchmark {
             }
             val loadMs = (System.nanoTime() - started) / 1e6
             Log.i(TAG, "")
-            Log.i(TAG, "--- ${variant.id} / ${provider.name}  (load ${"%.0f".format(loadMs)} ms)")
+            Log.i(TAG, "--- ${variant.id} / ${provider.name} (load ${"%.0f".format(loadMs)} ms)")
             Log.i(
                 TAG,
-                "%-10s %6s %8s %8s %8s %7s".format("case", "chars", "ttfa", "total", "audio", "rtf")
+                "%-10s %6s %8s %8s %8s %8s %7s".format(
+                    "case", "chars", "ttfa50", "tot50", "tot90", "audio", "rtf50"
+                )
             )
             created
         } catch (error: Exception) {
@@ -90,49 +102,84 @@ class SynthesisBenchmark {
             runBlocking { engine.synthesize("Warm up.") }
 
             for ((label, text) in cases) {
-                // Three passes, report the best - the phone's governor makes single runs noisy.
-                var best: Sample? = null
-                repeat(3) {
-                    val sample = measure(engine, text)
-                    if (best == null || sample.totalMs < best!!.totalMs) best = sample
-                }
-                val s = best!!
+                val samples = List(5) { measure(engine, text) }
+                val ttfa50 = percentile(samples.map { it.ttfaMs }, 50)
+                val total50 = percentile(samples.map { it.totalMs }, 50)
+                val total90 = percentile(samples.map { it.totalMs }, 90)
+                val audioSeconds = samples.first().audioSeconds
                 Log.i(
                     TAG,
-                    "%-10s %6d %8s %8s %8s %7s".format(
+                    "%-10s %6d %8s %8s %8s %8s %7s".format(
                         label,
                         text.length,
-                        "%.0f ms".format(s.ttfaMs),
-                        "%.0f ms".format(s.totalMs),
-                        "%.2f s".format(s.audioSeconds),
-                        "%.3f".format(s.totalMs / 1000.0 / s.audioSeconds),
+                        "%.0f ms".format(ttfa50),
+                        "%.0f ms".format(total50),
+                        "%.0f ms".format(total90),
+                        "%.2f s".format(audioSeconds),
+                        "%.3f".format(total50 / 1000.0 / audioSeconds),
                     )
                 )
             }
+            runListeningMatrix(engine)
         }
     }
 
     private data class Sample(val ttfaMs: Double, val totalMs: Double, val audioSeconds: Double)
 
-    private fun measure(engine: OnnxTts, text: String): Sample {
+    private fun measure(
+        engine: OnnxTts,
+        text: String,
+        speed: Float = 1.0f,
+        variation: Float = engine.variant.defaultVariation,
+    ): Sample {
         val started = System.nanoTime()
         var firstAudioNs = 0L
         var samples = 0L
+        var chunkCount = 0
         runBlocking {
-            engine.synthesizeStreaming(text) { audio ->
+            engine.synthesizeStreaming(text, speed = speed, variation = variation) { audio ->
                 // The leading piece of a multi-chunk utterance is real audio, not the pause,
                 // because pauses are only emitted *between* chunks.
                 if (firstAudioNs == 0L) firstAudioNs = System.nanoTime()
                 samples += audio.size
+                chunkCount += 1
                 true
             }
         }
         val endedNs = System.nanoTime()
+        if (chunkCount > 1) {
+            val slackMs = (samples.toDouble() / OnnxTts.SAMPLE_RATE) * 1000.0 -
+                ((endedNs - firstAudioNs) / 1e6)
+            Log.i(TAG, "chunkSlack=${"%.0f".format(slackMs)}ms for ${chunkCount} chunks")
+        }
         return Sample(
             ttfaMs = (firstAudioNs - started) / 1e6,
             totalMs = (endedNs - started) / 1e6,
             audioSeconds = samples.toDouble() / OnnxTts.SAMPLE_RATE,
         )
+    }
+
+    private fun runListeningMatrix(engine: OnnxTts) {
+        val speeds = listOf(1.0f, 1.05f)
+        val variations = listOf(engine.variant.defaultVariation - 0.07f, engine.variant.defaultVariation)
+        for (text in listeningCorpus) {
+            for (speed in speeds) {
+                for (variation in variations) {
+                    val sample = measure(engine, text, speed = speed, variation = variation)
+                    Log.i(
+                        TAG,
+                        "listen variant=${engine.variant.id} speed=$speed variation=${"%.2f".format(variation)} " +
+                            "ttfa=${"%.0f".format(sample.ttfaMs)} total=${"%.0f".format(sample.totalMs)}"
+                    )
+                }
+            }
+        }
+    }
+
+    private fun percentile(values: List<Double>, p: Int): Double {
+        val sorted = values.sorted()
+        val rank = ceil((p / 100.0) * sorted.size).toInt().coerceIn(1, sorted.size) - 1
+        return sorted[rank]
     }
 
     private companion object {

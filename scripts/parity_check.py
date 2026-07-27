@@ -51,7 +51,12 @@ def main() -> None:
     failures = []
     for sentence in SENTENCES:
         _, expected = upstream.synthesize(sentence, seed=args.seed)
-        actual = ours.synthesize(sentence, seed=args.seed).waveform
+        actual = ours.synthesize(
+            sentence,
+            seed=args.seed,
+            variation=0.667,
+            enhanced_prosody=False,
+        ).waveform
 
         if expected.shape != actual.shape:
             failures.append(f"{sentence!r}: shape {actual.shape} != upstream {expected.shape}")

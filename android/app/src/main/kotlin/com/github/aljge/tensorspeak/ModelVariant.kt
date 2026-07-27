@@ -6,9 +6,13 @@ package com.github.aljge.tensorspeak
  * Graphs live under `assets/<id>/duration.onnx` and `assets/<id>/decode.onnx`.
  * The text frontend (`symbols.json`, eSpeak) is shared.
  */
-enum class ModelVariant(val id: String, val label: String) {
-    MICRO("micro", "Micro · higher quality"),
-    NANO("nano", "Nano · smaller / faster");
+enum class ModelVariant(
+    val id: String,
+    val label: String,
+    val defaultVariation: Float,
+) {
+    MICRO("micro", "Micro · higher quality", 0.62f),
+    NANO("nano", "Nano · smaller / faster", 0.58f);
 
     companion object {
         val DEFAULT = MICRO

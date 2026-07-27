@@ -35,6 +35,7 @@ class MainActivity : ComponentActivity() {
         val input = findViewById<EditText>(R.id.input)
         val speak = findViewById<Button>(R.id.speak)
         val modelSpinner = findViewById<Spinner>(R.id.model)
+        val qualitySpinner = findViewById<Spinner>(R.id.quality)
         speak.isEnabled = false
         input.setText(DEMO_TEXT)
 
@@ -62,6 +63,27 @@ class MainActivity : ComponentActivity() {
             override fun onNothingSelected(parent: AdapterView<*>?) = Unit
         }
 
+        val profiles = QualityProfile.entries
+        qualitySpinner.adapter = ArrayAdapter(
+            this,
+            android.R.layout.simple_spinner_dropdown_item,
+            profiles.map { it.label },
+        )
+        qualitySpinner.setSelection(profiles.indexOf(ModelPreferences.qualityProfile(this)))
+        qualitySpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(
+                parent: AdapterView<*>?,
+                view: View?,
+                position: Int,
+                id: Long,
+            ) {
+                if (!spinnerReady || loadingModel) return
+                ModelPreferences.setQualityProfile(this@MainActivity, profiles[position])
+            }
+
+            override fun onNothingSelected(parent: AdapterView<*>?) = Unit
+        }
+
         loadEngine(ModelPreferences.get(this), status, speak) {
             spinnerReady = true
         }
@@ -74,7 +96,8 @@ class MainActivity : ComponentActivity() {
             lifecycleScope.launch {
                 try {
                     val started = System.currentTimeMillis()
-                    val waveform = engine.synthesize(text)
+                    val variation = ModelPreferences.variation(this@MainActivity, engine.variant)
+                    val waveform = engine.synthesize(text, variation = variation)
                     val elapsed = System.currentTimeMillis() - started
                     val seconds = waveform.size.toFloat() / OnnxTts.SAMPLE_RATE
                     status.text = getString(R.string.synthesized, seconds, elapsed)

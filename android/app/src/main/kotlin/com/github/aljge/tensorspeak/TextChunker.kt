@@ -22,15 +22,16 @@ internal object TextChunker {
 
     /** Pause inserted after a chunk, keyed by its final punctuation mark (seconds). */
     private val BOUNDARY_PAUSES = mapOf(
-        '?' to 0.28f,
-        '!' to 0.24f,
-        '.' to 0.22f,
-        ';' to 0.16f,
-        ':' to 0.13f,
-        ',' to 0.09f,
+        '?' to 0.20f,
+        '!' to 0.18f,
+        '.' to 0.15f,
+        ';' to 0.12f,
+        ':' to 0.10f,
+        ',' to 0.07f,
     )
 
-    private const val DEFAULT_PAUSE = 0.08f
+    private const val DEFAULT_PAUSE = 0.06f
+    private const val PROTECTED_DOT = '\uF000'
 
     /** Python's `\s`, spelled out; see [TextNormalizer]. */
     private const val WS = "[ \\t\\n\\u000B\\u000C\\r\\u001C-\\u001F\\u0085\\u00A0\\u1680" +
@@ -40,6 +41,11 @@ internal object TextChunker {
 
     /** `(?<=[.!?;:])\s+` - split after sentence-ending punctuation. */
     private val SENTENCE_SPLIT = Regex("(?<=[.!?;:])$WS+")
+    private val ABBREVIATION_DOT = Regex(
+        "\\b(?:dr|mr|mrs|ms|prof|st|vs|etc|e\\.g|i\\.e)\\.",
+        RegexOption.IGNORE_CASE,
+    )
+    private val INITIALISM_DOT = Regex("\\b(?:[A-Za-z]\\.){2,}")
 
     /** The marks a too-long sentence may be broken on, in `split_text`'s order. */
     private val INTERNAL_MARKS = charArrayOf(',', ';', ':')
@@ -61,7 +67,9 @@ internal object TextChunker {
         val normalized = collapseWhitespace(text)
         if (normalized.isEmpty()) return emptyList()
 
-        val sentences = SENTENCE_SPLIT.split(normalized)
+        val protected = protectSentenceDots(normalized)
+        val sentences = SENTENCE_SPLIT.split(protected)
+            .map { restoreSentenceDots(it) }
             .map { it.trim() }
             .filter { it.isNotEmpty() }
 
@@ -87,6 +95,19 @@ internal object TextChunker {
         }
         return chunks
     }
+
+    private fun protectSentenceDots(text: String): String {
+        var protected = ABBREVIATION_DOT.replace(text) { match ->
+            match.value.replace('.', PROTECTED_DOT)
+        }
+        protected = INITIALISM_DOT.replace(protected) { match ->
+            match.value.replace('.', PROTECTED_DOT)
+        }
+        return protected
+    }
+
+    private fun restoreSentenceDots(text: String): String =
+        text.replace(PROTECTED_DOT, '.')
 
     /** Seconds of silence to insert after [chunk], from the mark it ends with. */
     fun boundaryPauseSeconds(chunk: String): Float {

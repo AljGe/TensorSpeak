@@ -45,7 +45,19 @@ class TensorSpeakTtsService : TextToSpeechService() {
         val availability = onIsLanguageAvailable(lang, country, variant)
         if (availability != TextToSpeech.LANG_NOT_SUPPORTED) {
             // Warm the graphs and the eSpeak data copy so the first utterance is not slow.
-            runCatching { requireEngine() }
+            runCatching {
+                val warmed = requireEngine()
+                runBlocking {
+                    val variation = ModelPreferences.variation(applicationContext, warmed.variant)
+                    warmed.synthesizeStreaming(
+                        text = "Warm up.",
+                        speed = 1.0f,
+                        variation = variation,
+                        seed = 1L,
+                        shouldContinue = { true },
+                    ) { true }
+                }
+            }
                 .onFailure { Log.e(TAG, "failed to load the engine", it) }
         }
         return availability
@@ -77,8 +89,14 @@ class TensorSpeakTtsService : TextToSpeechService() {
             callback.start(OnnxTts.SAMPLE_RATE, AudioFormat.ENCODING_PCM_16BIT, 1)
 
             var delivered = true
+            val variation = ModelPreferences.variation(applicationContext, engine.variant)
             runBlocking {
-                engine.synthesizeStreaming(text, speed = speed) { audio ->
+                engine.synthesizeStreaming(
+                    text = text,
+                    speed = speed,
+                    variation = variation,
+                    shouldContinue = { !stopRequested },
+                ) { audio ->
                     streamPcm(audio, callback).also { delivered = it }
                 }
             }

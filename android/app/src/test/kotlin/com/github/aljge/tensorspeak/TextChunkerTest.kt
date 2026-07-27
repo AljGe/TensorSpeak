@@ -83,4 +83,20 @@ class TextChunkerTest {
             }
         }
     }
+
+    @Test
+    fun `does not split common abbreviations into micro sentences`() {
+        assertEquals(
+            listOf("Bring pens, paper, etc. tomorrow before 9:00."),
+            TextChunker.split("Bring pens, paper, etc. tomorrow before 9:00."),
+        )
+        assertEquals(
+            listOf("The package is bound for the U.S.A. and should arrive tomorrow."),
+            TextChunker.split("The package is bound for the U.S.A. and should arrive tomorrow."),
+        )
+        assertEquals(
+            listOf("Dr. Chen met Prof. Adler on St. Vincent Street."),
+            TextChunker.split("Dr. Chen met Prof. Adler on St. Vincent Street."),
+        )
+    }
 }

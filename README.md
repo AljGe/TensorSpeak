@@ -8,6 +8,11 @@ An Android text-to-speech engine built on
 APK; pick Nano (smaller/faster) or Micro (default, higher quality) in the harness /
 engine settings.
 
+Quality defaults are tuned per model:
+
+- Micro variation `0.62`, Nano variation `0.58` (`Balanced`)
+- Optional `Stable pronunciation` profile applies a lower variation for steadier phrasing
+
 The project is deliberately split in two, because the ONNX tensor contract has to be pinned
 down before any Kotlin is worth writing:
 

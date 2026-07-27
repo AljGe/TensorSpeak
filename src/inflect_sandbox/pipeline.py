@@ -43,6 +43,7 @@ PROVIDER_ALIASES = {
 }
 
 DURATION_OUTPUTS = ["m_p_exp", "logs_p_exp", "y_mask"]
+DEFAULT_VARIATION = {"micro": 0.62, "nano": 0.58}
 
 
 @dataclass
@@ -157,24 +158,27 @@ class InflectPipeline:
         text: str,
         *,
         speed: float = 1.0,
-        variation: float = 0.667,
+        variation: float | None = None,
         seed: int = 0,
+        enhanced_prosody: bool = True,
     ) -> SynthesisResult:
         normalized = " ".join(text.split())
         if not normalized:
             raise ValueError("Text must not be empty.")
+        if variation is None:
+            variation = DEFAULT_VARIATION.get(self.variant, 0.62)
         if not 0.5 <= speed <= 2.0:
             raise ValueError("speed must be between 0.5 and 2.0")
         if not 0.0 <= variation <= 1.0:
             raise ValueError("variation must be between 0.0 and 1.0")
 
-        chunks = split_text(normalized)
+        chunks = split_text(normalized, enhanced=enhanced_prosody)
         pieces: list[np.ndarray] = []
         traces: list[ChunkTrace] = []
 
         for index, chunk in enumerate(chunks):
             if index:
-                pause = boundary_pause_seconds(chunks[index - 1])
+                pause = boundary_pause_seconds(chunks[index - 1], enhanced=enhanced_prosody)
                 pieces.append(np.zeros(round(SAMPLE_RATE * pause), dtype=np.float32))
             # seed advances per chunk so adjacent chunks don't share a noise draw
             audio, trace = self.synthesize_chunk(

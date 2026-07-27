@@ -258,6 +258,10 @@ CHUNKING_CORPUS = [
     "x" * 400,
     # A mark sitting in the first half of the window, so the `limit // 2` guard rejects it.
     "short, " + ("y" * 400),
+    # Abbreviations should not force sentence splits.
+    "Bring pens, paper, etc. tomorrow before 9:00.",
+    "The package is bound for the U.S.A. and should arrive tomorrow.",
+    "Dr. Chen met Prof. Adler on St. Vincent Street.",
 ]
 
 

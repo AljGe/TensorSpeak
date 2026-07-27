@@ -42,6 +42,15 @@ def variant_root(variant: str = DEFAULT_VARIANT) -> Path:
 
 # Pause inserted after a chunk, keyed by its final punctuation mark (seconds).
 BOUNDARY_PAUSES = {
+    "?": 0.20,
+    "!": 0.18,
+    ".": 0.15,
+    ";": 0.12,
+    ":": 0.10,
+    ",": 0.07,
+}
+DEFAULT_PAUSE = 0.06
+LEGACY_BOUNDARY_PAUSES = {
     "?": 0.28,
     "!": 0.24,
     ".": 0.22,
@@ -49,9 +58,15 @@ BOUNDARY_PAUSES = {
     ":": 0.13,
     ",": 0.09,
 }
-DEFAULT_PAUSE = 0.08
+LEGACY_DEFAULT_PAUSE = 0.08
 
 _SENTENCE_SPLIT = re.compile(r"(?<=[.!?;:])\s+")
+_PROTECTED_DOT = "\uF000"
+_ABBREVIATION_DOT = re.compile(
+    r"\b(?:dr|mr|mrs|ms|prof|st|vs|etc|e\.g|i\.e)\.",
+    re.IGNORECASE,
+)
+_INITIALISM_DOT = re.compile(r"\b(?:[A-Za-z]\.){2,}")
 
 
 def _install_upstream_path(models_root: Path = FRONTEND_ROOT) -> None:
@@ -131,10 +146,18 @@ def phonemes_to_tokens(phoneme_text: str) -> np.ndarray:
     return with_blanks[None, :]
 
 
-def split_text(text: str, limit: int = 280) -> list[str]:
+def split_text(text: str, limit: int = 280, *, enhanced: bool = True) -> list[str]:
     """Split into synthesis chunks: sentence-first, then on punctuation, then whitespace."""
     normalized = " ".join(text.split())
-    sentences = [part.strip() for part in _SENTENCE_SPLIT.split(normalized) if part.strip()]
+    if enhanced:
+        protected = _protect_sentence_dots(normalized)
+        sentences = [
+            _restore_sentence_dots(part.strip())
+            for part in _SENTENCE_SPLIT.split(protected)
+            if part.strip()
+        ]
+    else:
+        sentences = [part.strip() for part in _SENTENCE_SPLIT.split(normalized) if part.strip()]
 
     chunks: list[str] = []
     for sentence in sentences or [normalized]:
@@ -155,6 +178,24 @@ def split_text(text: str, limit: int = 280) -> list[str]:
     return chunks
 
 
-def boundary_pause_seconds(chunk: str) -> float:
+def _protect_sentence_dots(text: str) -> str:
+    """Protect period-style abbreviations before sentence splitting."""
+    protected = text
+    protected = _ABBREVIATION_DOT.sub(
+        lambda match: match.group(0).replace(".", _PROTECTED_DOT), protected
+    )
+    protected = _INITIALISM_DOT.sub(
+        lambda match: match.group(0).replace(".", _PROTECTED_DOT), protected
+    )
+    return protected
+
+
+def _restore_sentence_dots(text: str) -> str:
+    return text.replace(_PROTECTED_DOT, ".")
+
+
+def boundary_pause_seconds(chunk: str, *, enhanced: bool = True) -> float:
     ending = chunk.rstrip()[-1:] if chunk.strip() else ""
-    return BOUNDARY_PAUSES.get(ending, DEFAULT_PAUSE)
+    if enhanced:
+        return BOUNDARY_PAUSES.get(ending, DEFAULT_PAUSE)
+    return LEGACY_BOUNDARY_PAUSES.get(ending, LEGACY_DEFAULT_PAUSE)

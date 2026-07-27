@@ -23,7 +23,7 @@ def main() -> None:
     ap.add_argument("--model", choices=VARIANTS, default=DEFAULT_VARIANT)
     ap.add_argument("--provider", default="cpu", choices=["cpu", "cuda", "directml"])
     ap.add_argument("--speed", type=float, default=1.0)
-    ap.add_argument("--variation", type=float, default=0.667)
+    ap.add_argument("--variation", type=float, default=None)
     ap.add_argument("--seed", type=int, default=0)
     args = ap.parse_args()
 

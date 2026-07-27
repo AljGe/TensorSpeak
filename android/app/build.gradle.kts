@@ -75,8 +75,8 @@ android {
     }
 
     androidResources {
-        // Keep the ONNX graphs uncompressed so ORT can map them straight out of the APK
-        // instead of inflating 38 MB into the heap on every cold start.
+        // Keep the ONNX graphs uncompressed so extraction to app storage is a direct copy.
+        // Session loading itself is configured in OnnxTts (file-backed by default).
         noCompress += "onnx"
     }
 
