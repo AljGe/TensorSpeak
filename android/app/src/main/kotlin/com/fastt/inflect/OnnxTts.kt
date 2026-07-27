@@ -201,6 +201,14 @@ class OnnxTts private constructor(
         decode.close()
     }
 
+    /**
+     * Which ONNX Runtime execution provider to build the sessions on.
+     *
+     * [AUTO] is what production uses. The explicit values exist so `SynthesisBenchmark` can
+     * measure one against the other instead of assuming XNNPACK is the faster choice.
+     */
+    enum class Provider { AUTO, XNNPACK, CPU }
+
     companion object {
         const val SAMPLE_RATE = 24_000
 
@@ -235,6 +243,7 @@ class OnnxTts private constructor(
             context: Context,
             variant: ModelVariant = ModelPreferences.get(context),
             phonemes: PhonemeSource = EspeakPhonemeSource(context),
+            provider: Provider = Provider.AUTO,
         ): OnnxTts = withContext(Dispatchers.IO) {
             val assets = context.assets
             val env = OrtEnvironment.getEnvironment()
@@ -249,10 +258,12 @@ class OnnxTts private constructor(
             var duration: OrtSession
             var decode: OrtSession
             try {
-                duration = env.createSession(durationBytes, sessionOptions(xnnpack = true))
-                decode = env.createSession(decodeBytes, sessionOptions(xnnpack = true))
+                val xnnpack = provider != Provider.CPU
+                duration = env.createSession(durationBytes, sessionOptions(xnnpack))
+                decode = env.createSession(decodeBytes, sessionOptions(xnnpack))
             } catch (error: Exception) {
                 // Not fatal: an ORT build or device without XNNPACK still runs on CPU.
+                if (provider == Provider.XNNPACK) throw error
                 Log.w(TAG, "XNNPACK unavailable, falling back to the CPU provider", error)
                 duration = env.createSession(durationBytes, sessionOptions(xnnpack = false))
                 decode = env.createSession(decodeBytes, sessionOptions(xnnpack = false))
