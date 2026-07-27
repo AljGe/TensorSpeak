@@ -1,0 +1,80 @@
+# Nix and devenv specific
+result*
+.devenv/
+.direnv/
+flake.lock
+
+# Python specific
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+env/
+venv/
+ENV/
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+osetests.xml
+.hypothesis/
+.pytest_cache/
+cover/
+
+# IDE / Editor specific
+.vscode/
+.idea/
+*.sublime-workspace
+*.sublime-project
+*.DS_Store
+*.swp
+*.swo 
+# Project specific
+models/
+out/
+*.wav
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/app/src/main/assets/*.onnx
+
+# devenv android module writes this at the repo root
+local.properties
+.android/
+.kotlin/
+android/.kotlin/
+.devenv.flake.nix

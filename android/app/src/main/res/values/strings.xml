@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Inflect TTS</string>
+    <string name="loading">Loading ONNX graphs…</string>
+    <string name="ready">Ready.</string>
+    <string name="speak">Speak</string>
+    <string name="synthesized">Synthesized %1$.2f s of audio in %2$d ms</string>
+</resources>

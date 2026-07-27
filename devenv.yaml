@@ -1,0 +1,6 @@
+inputs:
+  nixpkgs:
+    url: github:cachix/devenv-nixpkgs/rolling
+
+# The Android SDK and build-tools are unfree.
+allowUnfree: true
