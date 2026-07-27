@@ -37,6 +37,19 @@ class SynthesisBenchmark {
         }
     }
 
+    /**
+     * FP32 assets vs `files/experimental-ort/<variant>/` (push INT8 decode candidates there).
+     *
+     *   adb push out/experimental-int8/nano \\
+     *     /sdcard/Android/data/com.github.aljge.tensorspeak/files/experimental-ort/nano
+     */
+    @Test
+    fun benchmarkExperimentalGraphs() {
+        runBlockingCompat {
+            runner.run(SynthesisBenchmarkRunner.BenchmarkSpec.ExperimentalGraphs())
+        }
+    }
+
     private fun runBlockingCompat(block: suspend () -> Unit) {
         kotlinx.coroutines.runBlocking { block() }
     }

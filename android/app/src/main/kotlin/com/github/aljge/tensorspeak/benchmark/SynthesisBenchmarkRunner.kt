@@ -133,6 +133,17 @@ class SynthesisBenchmarkRunner(private val context: Context) {
         ) : BenchmarkSpec() {
             override val title: String = "cpu-threading"
         }
+
+        /**
+         * FP32 assets vs graphs under `files/experimental-ort/<variant>/`
+         * (INT8 decode candidates from `scripts/quantize_decode_experiment.py`).
+         */
+        data class ExperimentalGraphs(
+            val caseFilter: Set<String> = setOf("Short", "Sentence", "Expanded"),
+            val repeats: Int = 3,
+        ) : BenchmarkSpec() {
+            override val title: String = "experimental-graphs"
+        }
     }
 
     fun deviceInfo(): DeviceInfo = DeviceInfo(
@@ -279,6 +290,19 @@ class SynthesisBenchmarkRunner(private val context: Context) {
                     )
                 }
             }
+
+            is BenchmarkSpec.ExperimentalGraphs -> {
+                if (cont()) {
+                    runExperimentalGraphCompare(
+                        caseFilter = spec.caseFilter,
+                        repeats = spec.repeats,
+                        emit = ::emit,
+                        shouldContinue = ::cont,
+                        activeEngine = activeEngine,
+                        onProgress = onProgress,
+                    )
+                }
+            }
         }
 
         emit("=".repeat(78))
@@ -402,33 +426,115 @@ class SynthesisBenchmarkRunner(private val context: Context) {
         shouldContinue: () -> Boolean,
         activeEngine: (OnnxTts?) -> Unit,
     ) {
+        runExperimentalGraphCompare(
+            caseFilter = setOf("Short"),
+            repeats = 1,
+            emit = emit,
+            shouldContinue = shouldContinue,
+            activeEngine = activeEngine,
+            onProgress = {},
+        )
+    }
+
+    private suspend fun runExperimentalGraphCompare(
+        caseFilter: Set<String>,
+        repeats: Int,
+        emit: (String) -> Unit,
+        shouldContinue: () -> Boolean,
+        activeEngine: (OnnxTts?) -> Unit,
+        onProgress: (BenchmarkProgress) -> Unit,
+    ) {
         val experimental = File(context.getExternalFilesDir(null), "experimental-ort")
         if (!experimental.isDirectory) {
             emit("experimental ORT dir absent: $experimental")
             return
         }
+        emit("")
+        emit("--- experimental-ort compare (FP32 assets vs pushed graphs) @ $experimental")
+        emit(TABLE_HEADER)
+        val cases = STANDARD_CASES.filter { it.first in caseFilter }
         for (variant in ModelVariant.entries) {
             if (!shouldContinue()) return
             val dir = File(experimental, variant.id)
-            if (!dir.isDirectory) continue
-            try {
-                val engine = OnnxTts.fromAssets(
-                    context = context,
-                    variant = variant,
-                    config = RuntimeConfig.DEFAULT,
-                    graphDirectory = dir,
+            if (!dir.isDirectory) {
+                emit("experimental ${variant.id}: dir absent ($dir)")
+                continue
+            }
+            for ((sourceLabel, graphDirectory) in listOf("fp32-assets" to null, "experimental" to dir)) {
+                if (!shouldContinue()) return
+                val label = "${variant.id}/$sourceLabel"
+                onProgress(
+                    BenchmarkProgress(
+                        phase = BenchmarkProgress.Phase.LOADING,
+                        configLabel = label,
+                    ),
                 )
-                activeEngine(engine)
-                engine.use {
-                    val sample = measure(engine, STANDARD_CASES.first().second, shouldContinue)
-                    emit(
-                        "experimental ${variant.id} ttfa=${"%.0f".format(sample.ttfaMs)} " +
-                            "total=${"%.0f".format(sample.totalMs)} from $dir",
+                val beforeNative = Debug.getNativeHeapAllocatedSize()
+                val engine = try {
+                    val started = System.nanoTime()
+                    val created = OnnxTts.fromAssets(
+                        context = context,
+                        variant = variant,
+                        phonemes = EspeakPhonemeSource(context),
+                        config = RuntimeConfig.DEFAULT,
+                        graphDirectory = graphDirectory,
                     )
+                    val loadMs = (System.nanoTime() - started) / 1e6
+                    emit(
+                        "--- $label (load ${"%.0f".format(loadMs)} ms, " +
+                            "dNative=${(Debug.getNativeHeapAllocatedSize() - beforeNative) / 1_000_000}MB, " +
+                            "thermal=${thermalLabel()}, dir=${graphDirectory ?: "assets"})",
+                    )
+                    created
+                } catch (error: Exception) {
+                    emit("--- $label: unavailable (${error.message})")
+                    continue
                 }
-                activeEngine(null)
-            } catch (error: Exception) {
-                emit("experimental ${variant.id} failed: ${error.message}")
+                activeEngine(engine)
+                try {
+                    engine.use {
+                        engine.synthesize("Warm up.")
+                        for ((caseLabel, text) in cases) {
+                            if (!shouldContinue()) {
+                                engine.requestStop()
+                                return
+                            }
+                            onProgress(
+                                BenchmarkProgress(
+                                    phase = BenchmarkProgress.Phase.MEASURING,
+                                    configLabel = label,
+                                    caseLabel = caseLabel,
+                                ),
+                            )
+                            val samples = List(repeats) {
+                                if (!shouldContinue()) return@List BenchmarkSample(0.0, 0.0, 0.0)
+                                measure(engine, text, shouldContinue)
+                            }
+                            val serviceSamples = List(minOf(repeats, 2)) {
+                                measureServicePath(engine, text, shouldContinue)
+                            }
+                            val ttfa50 = percentile(samples.map { it.ttfaMs }, 50)
+                            val total50 = percentile(samples.map { it.totalMs }, 50)
+                            val total90 = percentile(samples.map { it.totalMs }, 90)
+                            val svc50 = percentile(serviceSamples.map { it.ttfaMs }, 50)
+                            val first = samples.first()
+                            emit(
+                                formatResultLine(
+                                    caseLabel,
+                                    text.length,
+                                    ttfa50,
+                                    total50,
+                                    total90,
+                                    first.audioSeconds,
+                                    svc50,
+                                ),
+                            )
+                            emit(formatStageLine(text, first))
+                        }
+                    }
+                } finally {
+                    activeEngine(null)
+                }
             }
         }
     }

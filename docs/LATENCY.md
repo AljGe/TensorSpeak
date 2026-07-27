@@ -40,6 +40,11 @@ adb shell am instrument -w \
   -e class com.github.aljge.tensorspeak.SynthesisBenchmark#benchmarkVariantsAndProviders \
   com.github.aljge.tensorspeak.test/androidx.test.runner.AndroidJUnitRunner
 
+# FP32 assets vs files/experimental-ort/<variant>/ (INT8 / offline ORT candidates)
+adb shell am instrument -w \
+  -e class com.github.aljge.tensorspeak.SynthesisBenchmark#benchmarkExperimentalGraphs \
+  com.github.aljge.tensorspeak.test/androidx.test.runner.AndroidJUnitRunner
+
 # Intra-op thread / spin / global-pool sweep (Nano)
 adb shell am instrument -w \
   -e class com.github.aljge.tensorspeak.SynthesisBenchmark#benchmarkCpuThreading \
@@ -72,12 +77,34 @@ conv / `ConvTranspose`; keep only if partitions are large and TTFA wins.
 ### Selective INT8 decode
 
 ```bash
-python scripts/quantize_decode_experiment.py --model nano
+python scripts/quantize_decode_experiment.py --model all
+# optional quality/speed presets: --profile conv_only|per_tensor|uint8_act|reduce_range
+# optional A/B WAVs under out/experimental-int8/<variant>/listen/
+python scripts/quantize_decode_experiment.py --model nano --profile conv_only --emit-wavs
+
+# On WSL2 with a USB device owned by Windows adb, use Windows adb.exe for push/install.
+adb push out/experimental-int8/nano/. \
+  /sdcard/Android/data/com.github.aljge.tensorspeak/files/experimental-ort/nano/
+# Shell-created dirs need world traverse so the app uid can read them:
+adb shell chmod -R a+rx /sdcard/Android/data/com.github.aljge.tensorspeak/files/experimental-ort
 ```
 
-Writes `out/experimental-int8/<variant>/decode.int8.onnx` plus float `duration.onnx`.
-Gate: device TTFA/RTF, duration stability, numerical sanity, blinded listening. Do **not**
+Writes **`decode.onnx`** (static QDQ INT8) plus float **`duration.onnx`** and `REPORT.json`
+under `out/experimental-int8/<variant>/` (not `decode.int8.onnx`). The on-device probe loads
+those exact names from `files/experimental-ort/<variant>/`.
+
+Focused instrumented compare (FP32 assets vs pushed graphs):
+
+```bash
+adb shell am instrument -w \
+  -e class com.github.aljge.tensorspeak.SynthesisBenchmark#benchmarkExperimentalGraphs \
+  com.github.aljge.tensorspeak.test/androidx.test.runner.AndroidJUnitRunner
+```
+
+Gate: device TTFA/`decodeMs`, duration stability, numerical sanity, blinded listening. Do **not**
 ship FP16 on CPU (ORT upcasts). QNN is Snapdragon-only and needs a custom ORT build.
+
+Research notes and Pixel 9a numbers: [docs/INT8_DECODE.md](INT8_DECODE.md).
 
 ## Acceptance
 
