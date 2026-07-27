@@ -312,6 +312,7 @@ class SynthesisBenchmark {
         val started = System.nanoTime()
         var firstAudioNs = 0L
         var samples = 0L
+        var checksum = 0
         val scratch = ByteArray(8192)
         runBlocking {
             engine.synthesizeStreaming(text) { audio ->
@@ -319,9 +320,7 @@ class SynthesisBenchmark {
                 while (offset < audio.size) {
                     val count = minOf(audio.size - offset, scratch.size / 2)
                     PcmConverter.floatToPcm16(audio, offset, count, scratch)
-                    if (scratch[0].toInt() == TextToSpeech.ERROR) {
-                        Log.v(TAG, "unreachable")
-                    }
+                    checksum = checksum xor scratch[0].toInt() xor scratch[1].toInt()
                     offset += count
                 }
                 if (firstAudioNs == 0L) firstAudioNs = System.nanoTime()
@@ -329,6 +328,8 @@ class SynthesisBenchmark {
                 true
             }
         }
+        // Keep the conversion side-effect observable without spamming logcat.
+        if (checksum == Int.MIN_VALUE) Log.v(TAG, "unreachable")
         val endedNs = System.nanoTime()
         return Sample(
             ttfaMs = (firstAudioNs - started) / 1e6,
