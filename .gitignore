@@ -81,3 +81,5 @@ local.properties
 .kotlin/
 android/.kotlin/
 .devenv.flake.nix
+AGENTS.md
+CLAUDE.md
