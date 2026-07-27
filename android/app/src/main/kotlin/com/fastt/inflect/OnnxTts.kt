@@ -204,10 +204,11 @@ class OnnxTts private constructor(
     /**
      * Which ONNX Runtime execution provider to build the sessions on.
      *
-     * [AUTO] is what production uses. The explicit values exist so `SynthesisBenchmark` can
-     * measure one against the other instead of assuming XNNPACK is the faster choice.
+     * [CPU] is the default because it measured *faster* than XNNPACK on every case of
+     * `SynthesisBenchmark` - see the note on [sessionOptions]. [XNNPACK] stays selectable so
+     * the comparison can be re-run when the runtime or the hardware changes.
      */
-    enum class Provider { AUTO, XNNPACK, CPU }
+    enum class Provider { CPU, XNNPACK }
 
     companion object {
         const val SAMPLE_RATE = 24_000
@@ -217,9 +218,20 @@ class OnnxTts private constructor(
         /**
          * Session options for one graph.
          *
+         * The default CPU provider is not a placeholder - it is the measured winner.
+         * `decode.onnx` is a convolution stack, which reads like XNNPACK's home ground, but
+         * on a Pixel 9a (8 cores, ORT 1.27) XNNPACK was slower on every case:
+         *
+         *   micro  short 1194 vs 603 ms   sentence 3344 vs 1853 ms   long 25899 vs 18354 ms
+         *   nano   short  534 vs 364 ms   sentence 1708 vs 1154 ms   long 18917 vs 10574 ms
+         *
+         * The likely reason is that the ORT CPU provider already parallelizes these convs
+         * across all four threads, whereas XNNPACK takes a large share of the graph into a
+         * partition that ORT then cannot thread as well - plus per-partition transfer cost.
+         * Re-run `SynthesisBenchmark` before changing this back.
+         *
          * With XNNPACK the session's own intra-op pool is pinned to a single thread and the
-         * thread budget handed to XNNPACK instead - ORT's guidance, and running both pools
-         * at full width just oversubscribes the little cores.
+         * thread budget handed to XNNPACK instead, per ORT's guidance.
          */
         private fun sessionOptions(xnnpack: Boolean): OrtSession.SessionOptions {
             val threads = Runtime.getRuntime().availableProcessors().coerceAtMost(4)
@@ -243,7 +255,7 @@ class OnnxTts private constructor(
             context: Context,
             variant: ModelVariant = ModelPreferences.get(context),
             phonemes: PhonemeSource = EspeakPhonemeSource(context),
-            provider: Provider = Provider.AUTO,
+            provider: Provider = Provider.CPU,
         ): OnnxTts = withContext(Dispatchers.IO) {
             val assets = context.assets
             val env = OrtEnvironment.getEnvironment()
@@ -252,22 +264,9 @@ class OnnxTts private constructor(
             val durationBytes = assets.open("$prefix/duration.onnx").readBytes()
             val decodeBytes = assets.open("$prefix/decode.onnx").readBytes()
 
-            // decode.onnx is ~97% of synthesis time and is a convolution stack, which is
-            // exactly XNNPACK's strength. It is compiled into the ORT AAR but has to be
-            // asked for; unsupported nodes fall back to the CPU provider per-node.
-            var duration: OrtSession
-            var decode: OrtSession
-            try {
-                val xnnpack = provider != Provider.CPU
-                duration = env.createSession(durationBytes, sessionOptions(xnnpack))
-                decode = env.createSession(decodeBytes, sessionOptions(xnnpack))
-            } catch (error: Exception) {
-                // Not fatal: an ORT build or device without XNNPACK still runs on CPU.
-                if (provider == Provider.XNNPACK) throw error
-                Log.w(TAG, "XNNPACK unavailable, falling back to the CPU provider", error)
-                duration = env.createSession(durationBytes, sessionOptions(xnnpack = false))
-                decode = env.createSession(decodeBytes, sessionOptions(xnnpack = false))
-            }
+            val xnnpack = provider == Provider.XNNPACK
+            val duration = env.createSession(durationBytes, sessionOptions(xnnpack))
+            val decode = env.createSession(decodeBytes, sessionOptions(xnnpack))
             val tokenizer = PhonemeTokenizer.fromJson(
                 assets.open("symbols.json").bufferedReader().use { it.readText() }
             )
