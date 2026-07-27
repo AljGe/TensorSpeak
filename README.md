@@ -26,6 +26,8 @@ The same pipeline is implemented twice: a **Python reference** (`src/inflect_san
 
 ## Development setup
 
+See [CONTRIBUTING.md](CONTRIBUTING.md) for setup, parity rules, and PR expectations.
+
 Requires [Nix](https://nixos.org/download.html) (flakes) and [direnv](https://direnv.net).
 
 ```bash
