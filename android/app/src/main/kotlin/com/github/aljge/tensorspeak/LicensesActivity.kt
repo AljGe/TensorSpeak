@@ -2,16 +2,22 @@ package com.github.aljge.tensorspeak
 
 import android.os.Bundle
 import android.widget.TextView
-import androidx.activity.ComponentActivity
+import androidx.appcompat.app.AppCompatActivity
+import com.google.android.material.appbar.MaterialToolbar
 
 /**
  * Offline open-source license texts (GPL-3.0 app + eSpeak, Apache-2.0 models, MIT ORT).
  */
-class LicensesActivity : ComponentActivity() {
+class LicensesActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_licenses)
+
+        val toolbar = findViewById<MaterialToolbar>(R.id.toolbar)
+        setSupportActionBar(toolbar)
+        supportActionBar?.setDisplayHomeAsUpEnabled(true)
+        toolbar.setNavigationOnClickListener { finish() }
 
         val body = findViewById<TextView>(R.id.licenses_body)
         body.text = buildString {

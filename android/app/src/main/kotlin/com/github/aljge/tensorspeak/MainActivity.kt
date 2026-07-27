@@ -2,19 +2,23 @@ package com.github.aljge.tensorspeak
 
 import android.content.Intent
 import android.os.Bundle
+import android.provider.Settings
 import android.view.View
 import android.widget.AdapterView
 import android.widget.ArrayAdapter
-import android.widget.Button
-import android.widget.EditText
 import android.widget.Spinner
 import android.widget.TextView
 import androidx.activity.ComponentActivity
 import androidx.lifecycle.lifecycleScope
+import com.google.android.material.appbar.MaterialToolbar
+import com.google.android.material.button.MaterialButton
+import com.google.android.material.chip.Chip
+import com.google.android.material.chip.ChipGroup
+import com.google.android.material.textfield.TextInputEditText
 import kotlinx.coroutines.launch
 
 /**
- * Minimal harness: load graphs, synthesize the text box, play it.
+ * Harness: load graphs, synthesize the text box, play it.
  *
  * Also the engine's `settingsActivity` (see `res/xml/tts_engine.xml`), so model / quality /
  * experimental runtime choices here apply to system TTS as well.
@@ -30,9 +34,12 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
+        findViewById<MaterialToolbar>(R.id.toolbar)
+
         val status = findViewById<TextView>(R.id.status)
-        val input = findViewById<EditText>(R.id.input)
-        val speak = findViewById<Button>(R.id.speak)
+        val input = findViewById<TextInputEditText>(R.id.input)
+        val speak = findViewById<MaterialButton>(R.id.speak)
+        val metrics = findViewById<ChipGroup>(R.id.metrics)
         speak.isEnabled = false
         input.setText(DEMO_TEXT)
 
@@ -78,7 +85,6 @@ class MainActivity : ComponentActivity() {
             ModelPreferences.latencyProfile(this),
         ) { selected ->
             ModelPreferences.setLatencyProfile(this, selected)
-            // No session reload: first-chunk budget is read per utterance.
             status.text = readyLabel()
         }
 
@@ -103,9 +109,12 @@ class MainActivity : ComponentActivity() {
 
         speak.setOnClickListener {
             val engine = tts ?: return@setOnClickListener
-            val text = input.text.toString().trim()
+            val text = input.text?.toString()?.trim().orEmpty()
             if (text.isEmpty()) return@setOnClickListener
             speak.isEnabled = false
+            speak.text = getString(R.string.speaking)
+            metrics.visibility = View.GONE
+            metrics.removeAllViews()
             lifecycleScope.launch {
                 try {
                     val started = System.currentTimeMillis()
@@ -128,19 +137,63 @@ class MainActivity : ComponentActivity() {
                     }
                     val elapsed = System.currentTimeMillis() - started
                     val seconds = samples.toFloat() / OnnxTts.SAMPLE_RATE
-                    status.text = getString(R.string.synthesized, seconds, elapsed) +
-                        if (firstAudioMs >= 0L) " (ttfa ${firstAudioMs} ms)" else ""
+                    status.text = getString(R.string.synthesized, seconds, elapsed)
+                    showMetrics(metrics, seconds, elapsed, firstAudioMs)
                 } catch (error: Exception) {
                     player.stop()
                     status.text = getString(R.string.synthesis_failed, error.message.orEmpty())
                 } finally {
+                    speak.text = getString(R.string.speak)
                     speak.isEnabled = tts != null && !loadingModel
                 }
             }
         }
 
-        findViewById<Button>(R.id.licenses).setOnClickListener {
+        findViewById<MaterialButton>(R.id.benchmark).setOnClickListener {
+            startActivity(Intent(this, BenchmarkActivity::class.java))
+        }
+
+        findViewById<MaterialButton>(R.id.licenses).setOnClickListener {
             startActivity(Intent(this, LicensesActivity::class.java))
+        }
+
+        findViewById<MaterialButton>(R.id.open_tts_settings).setOnClickListener {
+            openTtsSettings()
+        }
+    }
+
+    private fun showMetrics(group: ChipGroup, audioSeconds: Float, totalMs: Long, ttfaMs: Long) {
+        group.removeAllViews()
+        group.addView(makeMetricChip(getString(R.string.metric_audio, audioSeconds)))
+        group.addView(makeMetricChip(getString(R.string.metric_total, totalMs)))
+        if (ttfaMs >= 0L) {
+            group.addView(makeMetricChip(getString(R.string.metric_ttfa, ttfaMs)))
+        }
+        if (audioSeconds > 0f) {
+            val rtf = totalMs / 1000.0 / audioSeconds
+            group.addView(makeMetricChip(getString(R.string.metric_rtf, rtf)))
+        }
+        group.visibility = View.VISIBLE
+    }
+
+    private fun makeMetricChip(label: String): Chip =
+        Chip(this).apply {
+            text = label
+            isCheckable = false
+            isClickable = false
+        }
+
+    private fun openTtsSettings() {
+        val intents = listOf(
+            Intent("com.android.settings.TTS_SETTINGS"),
+            Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS),
+        )
+        for (intent in intents) {
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            if (intent.resolveActivity(packageManager) != null) {
+                startActivity(intent)
+                return
+            }
         }
     }
 
@@ -174,7 +227,7 @@ class MainActivity : ComponentActivity() {
 
     private fun reloadEngine(
         status: TextView,
-        speak: Button,
+        speak: MaterialButton,
         onDone: (() -> Unit)? = null,
     ) {
         loadingModel = true
@@ -193,7 +246,7 @@ class MainActivity : ComponentActivity() {
                     if (config.provider == OnnxTts.Provider.CPU) throw error
                     ModelPreferences.setExecutionBackend(this@MainActivity, ExecutionBackend.CPU)
                     findViewById<Spinner>(R.id.backend).setSelection(
-                        ExecutionBackend.entries.indexOf(ExecutionBackend.CPU)
+                        ExecutionBackend.entries.indexOf(ExecutionBackend.CPU),
                     )
                     EngineRepository.acquire(
                         this@MainActivity,

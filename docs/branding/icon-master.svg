@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- TensorSpeak launcher mark: monoline wave + three tensor nodes. Safe zone ~61% of 512 canvas. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" fill="none">
+  <rect width="512" height="512" fill="#15182B"/>
+  <!-- faint grid hint (tensor) -->
+  <g opacity="0.12" stroke="#818CF8" stroke-width="2">
+    <line x1="176" y1="176" x2="336" y2="176"/>
+    <line x1="176" y1="256" x2="336" y2="256"/>
+    <line x1="176" y1="336" x2="336" y2="336"/>
+    <line x1="176" y1="176" x2="176" y2="336"/>
+    <line x1="256" y1="176" x2="256" y2="336"/>
+    <line x1="336" y1="176" x2="336" y2="336"/>
+  </g>
+  <defs>
+    <linearGradient id="waveGrad" x1="160" y1="280" x2="352" y2="232" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#6EE7B7"/>
+      <stop offset="1" stop-color="#818CF8"/>
+    </linearGradient>
+  </defs>
+  <!-- waveform stroke -->
+  <path
+    d="M 168 268
+       C 192 268, 200 208, 224 208
+       C 248 208, 256 304, 280 304
+       C 304 304, 312 248, 344 248"
+    stroke="url(#waveGrad)"
+    stroke-width="20"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    fill="none"/>
+  <!-- nodes on wave peaks/inflections -->
+  <circle cx="224" cy="208" r="14" fill="#F8FAFC"/>
+  <circle cx="280" cy="304" r="14" fill="#A5B4FC"/>
+  <circle cx="344" cy="248" r="14" fill="#F8FAFC"/>
+</svg>

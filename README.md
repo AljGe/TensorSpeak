@@ -1,5 +1,9 @@
 # TensorSpeak
 
+<p align="center">
+  <img src="docs/branding/icon-512.png" width="128" height="128" alt="TensorSpeak" />
+</p>
+
 On-device Android text-to-speech built on **[Inflect](https://github.com/owenawsong/Inflect)** by [Owen Song](https://github.com/owenawsong) ([@owenawsong](https://github.com/owenawsong)): complete local text-to-waveform stacks under ~10M parameters. This app ships the official ONNX exports [Inflect-Micro-v2-ONNX](https://huggingface.co/owensong/Inflect-Micro-v2-ONNX) (9.36M, default) and [Inflect-Nano-v2-ONNX](https://huggingface.co/owensong/Inflect-Nano-v2-ONNX) (3.96M, faster)—24 kHz mono, Apache-2.0. For what the models are, how they were measured, and runtime benchmarks, see Owen’s [Inflect v2 evaluation writeup](https://huggingface.co/owensong/Inflect-Micro-v2/blob/main/docs/EVALUATION.md) and the [Micro v2](https://huggingface.co/owensong/Inflect-Micro-v2) / [Nano v2](https://huggingface.co/owensong/Inflect-Nano-v2) model cards on Hugging Face.
 
 TensorSpeak is a separate Android port and system TTS wrapper; the voices and graphs are Owen’s Inflect releases. Choose **Micro** or **Nano** in the app or in system TTS settings.

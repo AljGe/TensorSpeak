@@ -3,9 +3,11 @@
 
     <application
         android:allowBackup="true"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
         android:label="@string/app_name"
         android:supportsRtl="true"
-        android:theme="@style/Theme.AppCompat.DayNight">
+        android:theme="@style/Theme.TensorSpeak">
 
         <activity
             android:name=".MainActivity"
@@ -20,6 +22,12 @@
             android:name=".LicensesActivity"
             android:exported="false"
             android:label="@string/licenses_title"
+            android:parentActivityName=".MainActivity" />
+
+        <activity
+            android:name=".BenchmarkActivity"
+            android:exported="false"
+            android:label="@string/benchmark_title"
             android:parentActivityName=".MainActivity" />
 
         <!-- System-wide voice: selectable in Settings > Accessibility > Text-to-speech. -->

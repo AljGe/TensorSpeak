@@ -14,10 +14,22 @@ without audio regressions.
 | One-shot language warm-up; ORT `RunOptions.setTerminate` on stop | production |
 | Fused edge-fade / clip / PCM16 with reused scratch buffer | production |
 | Preview `AudioTrack` streaming in `MainActivity` | production |
+| In-app synthesis benchmark (Quick / Compare backends) | production |
 | Experimental · NNAPI / XNNPACK / thread overrides | opt-in in settings UI (falls back to CPU) |
 | First-chunk latency profile (64 / 96 / 280) | opt-in in settings UI |
 
 ## Benchmark entry points
+
+### In the app
+
+Open **TensorSpeak → Run benchmark** for on-device timing with your current engine
+settings (**Quick**) or a **Compare backends** sweep (CPU / XNNPACK / NNAPI). Results can
+be copied or shared; the same lines are logged under tag `SynthBench`.
+
+The full variant × provider matrix and Nano CPU threading sweep remain instrumented tests
+(multi-hour). The benchmark screen shows the adb one-liner; logcat workflow below is unchanged.
+
+### adb (full suite)
 
 ```bash
 cd android

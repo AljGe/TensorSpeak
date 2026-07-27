@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.TensorSpeak" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="colorPrimary">@color/ts_primary</item>
+        <item name="colorOnPrimary">@color/ts_on_primary</item>
+        <item name="colorPrimaryContainer">@color/ts_primary_container</item>
+        <item name="colorOnPrimaryContainer">@color/ts_on_primary_container</item>
+        <item name="colorSecondary">@color/ts_secondary</item>
+        <item name="colorOnSecondary">@color/ts_on_secondary</item>
+        <item name="colorSurface">@color/ts_surface</item>
+        <item name="colorOnSurface">@color/ts_on_surface</item>
+        <item name="colorSurfaceVariant">@color/ts_surface_variant</item>
+        <item name="colorOnSurfaceVariant">@color/ts_on_surface_variant</item>
+        <item name="colorError">@color/ts_error</item>
+        <item name="colorOnError">@color/ts_on_error</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+    </style>
+</resources>
