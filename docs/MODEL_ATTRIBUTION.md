@@ -1,8 +1,9 @@
 # Model attribution
 
 TensorSpeak’s speech quality comes from **[Inflect](https://github.com/owenawsong/Inflect)**, an independent
-ultra-lightweight local TTS project by **[Owen Song](https://huggingface.co/owensong)** (`owensong`). Owen’s
-[Inflect v2 evaluation writeup](https://huggingface.co/owensong/Inflect-Micro-v2/blob/main/docs/EVALUATION.md)
+ultra-lightweight local TTS project by **[Owen Song](https://github.com/owenawsong)**
+([@owenawsong](https://github.com/owenawsong); models on [Hugging Face](https://huggingface.co/owensong)).
+Owen’s [Inflect v2 evaluation writeup](https://huggingface.co/owensong/Inflect-Micro-v2/blob/main/docs/EVALUATION.md)
 documents benchmarks, listening tests, and runtime for Micro v2 and Nano v2; the
 [Micro v2](https://huggingface.co/owensong/Inflect-Micro-v2) and
 [Nano v2](https://huggingface.co/owensong/Inflect-Nano-v2) model cards summarize the release.
@@ -15,7 +16,8 @@ checkpoints). Both are **Apache License 2.0** and may be redistributed with the 
 | Micro (default) | [owensong/Inflect-Micro-v2-ONNX](https://huggingface.co/owensong/Inflect-Micro-v2-ONNX) | 9.36M | `assets/micro/{duration,decode}.onnx` |
 | Nano | [owensong/Inflect-Nano-v2-ONNX](https://huggingface.co/owensong/Inflect-Nano-v2-ONNX) | 3.96M | `assets/nano/{duration,decode}.onnx` |
 
-**Credit:** Inflect models and reference inference by **Owen Song** ([Inflect on GitHub](https://github.com/owenawsong/Inflect)).
+**Credit:** Inflect models and reference inference by **[Owen Song](https://github.com/owenawsong)**
+([@owenawsong](https://github.com/owenawsong); [Inflect](https://github.com/owenawsong/Inflect)).
 Official ONNX packaging by Owen’s Hugging Face releases; conversion tooling by **Robert Bak**
 ([`webtts-inflect`](https://github.com/robertbak/webtts-inflect)). Each download includes `onnx/SOURCE.json`
 with revision hashes and `"license": "Apache-2.0"`.
