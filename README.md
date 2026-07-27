@@ -8,6 +8,15 @@ An Android text-to-speech engine built on
 APK; pick Nano (smaller/faster) or Micro (default, higher quality) in the harness /
 engine settings.
 
+## Install
+
+[![Get it on Obtainium](https://raw.githubusercontent.com/ImranR98/Obtainium/main/assets/graphics/badge_obtainium.png)](http://apps.obtainium.imranr.dev/redirect.html?r=obtainium://add/https://github.com/AljGe/TensorSpeak)
+
+Install and update from [GitHub Releases](https://github.com/AljGe/TensorSpeak/releases) with
+[Obtainium](https://github.com/ImranR98/Obtainium), or download the signed unified APK
+(`TensorSpeak-*-unified.apk`) manually. Published releases include both Micro and Nano models
+in one package (`arm64-v8a` and `x86_64`).
+
 Quality defaults are tuned per model:
 
 - Micro variation `0.62`, Nano variation `0.58` (`Balanced`)
@@ -164,38 +173,43 @@ python scripts/fetch_model.py
 python scripts/export_android_assets.py --espeak-data
 ```
 
-2. Optional signing - create `android/keystore.properties` (gitignored) **or** set env vars:
+2. Release signing — copy [`.signing.env.example`](.signing.env.example) to `.signing.env`
+   (gitignored) or [`android/keystore.properties.example`](android/keystore.properties.example)
+   to `android/keystore.properties`, then set passwords. Default keystore path:
 
-```properties
-storeFile=/absolute/path/to/tensorspeak-release.jks
-storePassword=...
-keyAlias=tensorspeak
-keyPassword=...
-```
+   `/home/archliNix/tensorspeak-release.jks` (keep outside the repo).
 
 ```bash
-export TENSORSPEAK_STORE_FILE=/absolute/path/to/tensorspeak-release.jks
-export TENSORSPEAK_STORE_PASSWORD=...
-export TENSORSPEAK_KEY_ALIAS=tensorspeak
-export TENSORSPEAK_KEY_PASSWORD=...
+cp .signing.env.example .signing.env   # edit passwords
+set -a && source .signing.env && set +a
 ```
 
-3. Build:
+3. Build a signed unified APK:
+
+```bash
+./scripts/build_signed_release_apk.sh          # local artifact only
+./scripts/build_signed_release_apk.sh --upload # refresh GitHub release asset
+```
+
+Or manually:
 
 ```bash
 cd android && ./gradlew :app:assembleRelease
-# APK: app/build/outputs/apk/release/app-release.apk  (or app-release-unsigned.apk)
+cp app/build/outputs/apk/release/app-release.apk \
+   app/build/outputs/apk/release/TensorSpeak-0.1.0-unified.apk
 ```
 
-Without keystore props/env, the release build still completes but is not release-signed.
+With signing configured you get `app-release.apk`; without it, Gradle emits
+`app-release-unsigned.apk` only.
 
 ## GitHub Releases (when you publish)
 
 - Push the full source repository (including this README, `LICENSE`, and
   `THIRD_PARTY_NOTICES.md`) before or at the same time as the binary.
 - Tag the release to match `versionName` in `app/build.gradle.kts` (currently `0.1.0`).
-- Attach the signed release APK to the GitHub Release.
+- Attach one signed unified APK per release (name: `TensorSpeak-<version>-unified.apk`).
 - Link `THIRD_PARTY_NOTICES.md` / `docs/MODEL_ATTRIBUTION.md` from the release notes.
+- Publish the release (not draft-only) so Obtainium can track updates.
 
 ## License
 

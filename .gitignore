@@ -91,3 +91,4 @@ CLAUDE.md
 *.p12
 keystore.properties
 signing.properties
+.signing.env
