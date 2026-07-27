@@ -2,14 +2,19 @@ package com.github.aljge.tensorspeak
 
 import ai.onnxruntime.OnnxTensor
 import ai.onnxruntime.OrtEnvironment
+import ai.onnxruntime.OrtLoggingLevel
 import ai.onnxruntime.OrtSession
+import ai.onnxruntime.providers.NNAPIFlags
 import android.content.Context
+import android.os.Debug
 import android.util.Log
-import java.io.File
 import java.io.Closeable
+import java.io.File
 import java.nio.FloatBuffer
 import java.nio.LongBuffer
+import java.util.EnumSet
 import java.util.Random
+import java.util.concurrent.atomic.AtomicReference
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -38,7 +43,22 @@ class OnnxTts private constructor(
     private val tokenizer: PhonemeTokenizer,
     private val phonemes: PhonemeSource,
     val variant: ModelVariant,
+    val runtimeConfig: RuntimeConfig,
 ) : Closeable {
+
+    private val activeRunOptions = AtomicReference<OrtSession.RunOptions?>(null)
+
+    data class StageTimings(
+        val normalizeMs: Double = 0.0,
+        val phonemeMs: Double = 0.0,
+        val tokenCount: Int = 0,
+        val durationMs: Double = 0.0,
+        val melLen: Int = 0,
+        val noiseMs: Double = 0.0,
+        val decodeMs: Double = 0.0,
+        val postprocessMs: Double = 0.0,
+        val wavLen: Int = 0,
+    )
 
     /**
      * Synthesize chunk by chunk, handing each piece of audio to [onAudio] as soon as it is
@@ -49,7 +69,8 @@ class OnnxTts private constructor(
      * This is the streaming entry point, and it is what makes the engine usable on long
      * text: decoding is ~97% of the work and scales with utterance length, so waiting for a
      * whole paragraph before emitting a sample put 8-14 s between the tap and the first
-     * sound. Emitting per chunk makes time-to-first-audio the cost of one sentence instead.
+     * sound. Emitting per chunk makes time-to-first-audio the cost of one (bounded) sentence
+     * piece instead.
      *
      * @param onAudio receives each piece in order; return false to abandon the utterance.
      * @param speed 0.5..2.0; sent to the graph as `length_scale = 1 / speed`.
@@ -61,13 +82,20 @@ class OnnxTts private constructor(
         variation: Float? = null,
         seed: Long = 0L,
         shouldContinue: () -> Boolean = { true },
+        onChunkTiming: ((StageTimings) -> Unit)? = null,
         onAudio: (FloatArray) -> Boolean,
     ): Unit = withContext(Dispatchers.Default) {
         val selectedVariation = variation ?: variant.defaultVariation
         require(speed in 0.5f..2.0f) { "speed must be between 0.5 and 2.0" }
         require(selectedVariation in 0.0f..1.0f) { "variation must be between 0.0 and 1.0" }
 
-        val chunks = TextChunker.split(text)
+        // Expand money/dates before splitting so FIRST_CHUNK_LIMIT bounds real decode cost.
+        val normalizeStarted = System.nanoTime()
+        val forChunking = TextNormalizer.normalize(text).ifBlank {
+            TextChunker.collapseWhitespace(text)
+        }
+        val normalizeMs = (System.nanoTime() - normalizeStarted) / 1e6
+        val chunks = TextChunker.split(forChunking)
         for ((index, chunk) in chunks.withIndex()) {
             if (!shouldContinue()) return@withContext
             if (index > 0) {
@@ -76,7 +104,9 @@ class OnnxTts private constructor(
                 if (!onAudio(silence)) return@withContext
             }
 
+            val phonemeStarted = System.nanoTime()
             val phonemeText = phonemes.phonemize(chunk)
+            val phonemeMs = (System.nanoTime() - phonemeStarted) / 1e6
             // A chunk can phonemize to nothing (punctuation the normalizer left behind).
             // The reference raises here; an engine driving the system voice must not die on
             // one unspeakable fragment, so it is skipped - the pause around it still plays.
@@ -88,22 +118,30 @@ class OnnxTts private constructor(
 
             // seed advances per chunk so adjacent chunks don't share a noise draw
             val tokens = tokenizer.toTokens(phonemeText)
-            val audio = synthesizeTokens(
+            val (audio, stages) = synthesizeTokensTimed(
                 tokens,
                 speed,
                 selectedVariation,
                 seed + index,
-                shouldContinue
+                shouldContinue,
             )
-            for (i in audio.indices) audio[i] = audio[i].coerceIn(-1.0f, 1.0f)
+            onChunkTiming?.invoke(
+                stages.copy(
+                    normalizeMs = if (index == 0) normalizeMs else 0.0,
+                    phonemeMs = phonemeMs,
+                    tokenCount = tokens.size,
+                    wavLen = audio.size,
+                )
+            )
+            if (audio.isEmpty()) return@withContext
             if (!onAudio(audio)) return@withContext
         }
     }
 
     /**
      * The whole utterance as one array. Convenience over [synthesizeStreaming] for callers
-     * that want a complete waveform (the demo activity, the parity test); the TTS service
-     * uses the streaming form.
+     * that want a complete waveform (parity tests); the TTS service and the demo harness
+     * use the streaming form.
      */
     suspend fun synthesize(
         text: String,
@@ -124,17 +162,35 @@ class OnnxTts private constructor(
         return waveform
     }
 
+    /** Ask any in-flight ORT `run` to abort; checked again between chunks. */
+    fun requestStop() {
+        activeRunOptions.get()?.let { options ->
+            runCatching { options.setTerminate(true) }
+                .onFailure { Log.w(TAG, "failed to terminate ORT run", it) }
+        }
+    }
+
     fun synthesizeTokens(
         tokens: LongArray,
         speed: Float = 1.0f,
         variation: Float? = null,
         seed: Long = 0L,
         shouldContinue: () -> Boolean = { true },
-    ): FloatArray {
+    ): FloatArray = synthesizeTokensTimed(tokens, speed, variation, seed, shouldContinue).first
+
+    private fun synthesizeTokensTimed(
+        tokens: LongArray,
+        speed: Float = 1.0f,
+        variation: Float? = null,
+        seed: Long = 0L,
+        shouldContinue: () -> Boolean = { true },
+    ): Pair<FloatArray, StageTimings> {
         val selectedVariation = variation ?: variant.defaultVariation
         val closeables = mutableListOf<OnnxTensor>()
+        val runOptions = OrtSession.RunOptions()
+        activeRunOptions.set(runOptions)
         try {
-            if (!shouldContinue()) return FloatArray(0)
+            if (!shouldContinue()) return FloatArray(0) to StageTimings()
             val tokenTensor = OnnxTensor.createTensor(
                 env, LongBuffer.wrap(tokens), longArrayOf(1, tokens.size.toLong())
             ).also(closeables::add)
@@ -145,21 +201,28 @@ class OnnxTts private constructor(
                 env, FloatBuffer.wrap(floatArrayOf(1.0f / speed)), longArrayOf()
             ).also(closeables::add)
 
+            val durationStarted = System.nanoTime()
             duration.run(
                 mapOf(
                     "tokens" to tokenTensor,
                     "lengths" to lengthTensor,
                     "length_scale" to lengthScale,
-                )
+                ),
+                runOptions,
             ).use { durationResult ->
-                if (!shouldContinue()) return FloatArray(0)
+                val durationMs = (System.nanoTime() - durationStarted) / 1e6
+                if (!shouldContinue()) return FloatArray(0) to StageTimings(durationMs = durationMs)
                 val mP = durationResult.get(0) as OnnxTensor
                 val logsP = durationResult.get(1) as OnnxTensor
                 val yMask = durationResult.get(2) as OnnxTensor
 
                 val shape = mP.info.shape // [1, C, mel_len]
+                val melLen = shape[2].toInt()
                 val elements = shape.fold(1L) { acc, dim -> acc * dim }.toInt()
+
+                val noiseStarted = System.nanoTime()
                 val noise = standardNormal(elements, seed)
+                val noiseMs = (System.nanoTime() - noiseStarted) / 1e6
 
                 val noiseTensor = OnnxTensor.createTensor(env, FloatBuffer.wrap(noise), shape)
                     .also(closeables::add)
@@ -167,6 +230,7 @@ class OnnxTts private constructor(
                     env, FloatBuffer.wrap(floatArrayOf(selectedVariation)), longArrayOf()
                 ).also(closeables::add)
 
+                val decodeStarted = System.nanoTime()
                 decode.run(
                     mapOf(
                         "m_p_exp" to mP,
@@ -174,16 +238,39 @@ class OnnxTts private constructor(
                         "y_mask" to yMask,
                         "zp_noise" to noiseTensor,
                         "noise_scale" to noiseScale,
-                    )
+                    ),
+                    runOptions,
                 ).use { decodeResult ->
-                    if (!shouldContinue()) return FloatArray(0)
+                    val decodeMs = (System.nanoTime() - decodeStarted) / 1e6
+                    if (!shouldContinue()) {
+                        return FloatArray(0) to StageTimings(
+                            tokenCount = tokens.size,
+                            durationMs = durationMs,
+                            melLen = melLen,
+                            noiseMs = noiseMs,
+                            decodeMs = decodeMs,
+                        )
+                    }
                     val waveform = decodeResult.get(0) as OnnxTensor
+                    val postStarted = System.nanoTime()
                     val flat = FloatArray(waveform.floatBuffer.remaining())
                     waveform.floatBuffer.get(flat)
-                    return edgeFade(flat)
+                    PcmConverter.edgeFadeAndClip(flat)
+                    val postprocessMs = (System.nanoTime() - postStarted) / 1e6
+                    return flat to StageTimings(
+                        tokenCount = tokens.size,
+                        durationMs = durationMs,
+                        melLen = melLen,
+                        noiseMs = noiseMs,
+                        decodeMs = decodeMs,
+                        postprocessMs = postprocessMs,
+                        wavLen = flat.size,
+                    )
                 }
             }
         } finally {
+            activeRunOptions.compareAndSet(runOptions, null)
+            runCatching { runOptions.close() }
             closeables.forEach(OnnxTensor::close)
         }
     }
@@ -198,21 +285,14 @@ class OnnxTts private constructor(
         return FloatArray(count) { random.nextGaussian().toFloat() }
     }
 
-    /** Ramp the first/last 5 ms so concatenated utterances do not click. */
-    private fun edgeFade(waveform: FloatArray, milliseconds: Float = 5.0f): FloatArray {
-        val frames = minOf(
-            Math.round(SAMPLE_RATE * milliseconds / 1000.0f), waveform.size / 2
-        )
-        if (frames <= 0) return waveform
-        for (i in 0 until frames) {
-            val ramp = i.toFloat() / (frames - 1).coerceAtLeast(1)
-            waveform[i] *= ramp
-            waveform[waveform.size - 1 - i] *= ramp
-        }
-        return waveform
-    }
-
     override fun close() {
+        requestStop()
+        runCatching {
+            if (runtimeConfig.enableProfiling) {
+                Log.i(TAG, "duration profile: ${duration.endProfiling()}")
+                Log.i(TAG, "decode profile: ${decode.endProfiling()}")
+            }
+        }
         duration.close()
         decode.close()
     }
@@ -221,15 +301,18 @@ class OnnxTts private constructor(
      * Which ONNX Runtime execution provider to build the sessions on.
      *
      * [CPU] is the default because it measured *faster* than XNNPACK on every case of
-     * `SynthesisBenchmark` - see the note on [sessionOptions]. [XNNPACK] stays selectable so
-     * the comparison can be re-run when the runtime or the hardware changes.
+     * `SynthesisBenchmark` - see the note on [sessionOptions]. [XNNPACK] and [NNAPI] stay
+     * selectable so the comparison can be re-run when the runtime or the hardware changes.
      */
-    enum class Provider { CPU, XNNPACK }
+    enum class Provider { CPU, XNNPACK, NNAPI }
 
     companion object {
         const val SAMPLE_RATE = 24_000
 
         private const val TAG = "OnnxTts"
+
+        @Volatile
+        private var globalPoolConfigured = false
 
         /**
          * Session options for one graph.
@@ -248,26 +331,79 @@ class OnnxTts private constructor(
          *
          * With XNNPACK the session's own intra-op pool is pinned to a single thread and the
          * thread budget handed to XNNPACK instead, per ORT's guidance.
+         *
+         * NNAPI is experimental: VITS 1-D conv / ConvTranspose often fragment onto CPU and
+         * can lose. Keep it behind the benchmark gate.
          */
-        private fun sessionOptions(xnnpack: Boolean): OrtSession.SessionOptions {
-            val threads = defaultCpuThreads()
+        private fun sessionOptions(
+            config: RuntimeConfig,
+            profilePath: String?,
+        ): OrtSession.SessionOptions {
+            val threads = config.intraOpThreads
             return OrtSession.SessionOptions().apply {
                 setOptimizationLevel(OrtSession.SessionOptions.OptLevel.ALL_OPT)
-                if (xnnpack) {
-                    addXnnpack(mapOf("intra_op_num_threads" to threads.toString()))
-                    setIntraOpNumThreads(1)
-                } else {
-                    setIntraOpNumThreads(threads)
+                when (config.provider) {
+                    Provider.XNNPACK -> {
+                        val xnnThreads = if (threads <= 0) defaultCpuThreads() else threads
+                        addXnnpack(mapOf("intra_op_num_threads" to xnnThreads.toString()))
+                        setIntraOpNumThreads(1)
+                    }
+                    Provider.NNAPI -> {
+                        // Prefer accelerator partitions; fall back to ORT CPU for the rest.
+                        addNnapi(EnumSet.of(NNAPIFlags.CPU_DISABLED))
+                        if (threads > 0) setIntraOpNumThreads(threads)
+                    }
+                    Provider.CPU -> {
+                        if (threads > 0) setIntraOpNumThreads(threads)
+                    }
+                }
+                if (config.useGlobalThreadPool && globalPoolConfigured) {
+                    disablePerSessionThreads()
+                }
+                config.allowSpinning?.let { spinning ->
+                    addConfigEntry("session.intra_op.allow_spinning", if (spinning) "1" else "0")
+                }
+                if (config.enableProfiling && profilePath != null) {
+                    enableProfiling(profilePath)
                 }
             }
         }
 
         fun defaultCpuThreads(): Int = Runtime.getRuntime().availableProcessors().coerceAtMost(4)
 
+        private fun environmentFor(config: RuntimeConfig): OrtEnvironment {
+            if (config.useGlobalThreadPool && !globalPoolConfigured) {
+                val threads = if (config.intraOpThreads > 0) {
+                    config.intraOpThreads
+                } else {
+                    defaultCpuThreads()
+                }
+                return try {
+                    OrtEnvironment.ThreadingOptions().use { threading ->
+                        threading.setGlobalIntraOpNumThreads(threads)
+                        threading.setGlobalInterOpNumThreads(1)
+                        config.allowSpinning?.let { threading.setGlobalSpinControl(it) }
+                        globalPoolConfigured = true
+                        OrtEnvironment.getEnvironment(
+                            OrtLoggingLevel.ORT_LOGGING_LEVEL_WARNING,
+                            "tensorspeak",
+                            threading,
+                        )
+                    }
+                } catch (error: Exception) {
+                    // Environment already exists without a global pool - fall back.
+                    Log.w(TAG, "global ORT thread pool unavailable: ${error.message}")
+                    OrtEnvironment.getEnvironment()
+                }
+            }
+            return OrtEnvironment.getEnvironment()
+        }
+
         /**
          * Reads both graphs for [variant] and the shared symbol table out of assets.
          * The graphs are stored uncompressed (see `noCompress += "onnx"`), so this is a
-         * straight read.
+         * straight read. Optional [graphDirectory] loads pre-optimized / ORT-format files
+         * from an absolute directory instead of assets (experimental track).
          */
         suspend fun fromAssets(
             context: Context,
@@ -275,31 +411,63 @@ class OnnxTts private constructor(
             phonemes: PhonemeSource = EspeakPhonemeSource(context),
             provider: Provider = Provider.CPU,
             useFileBackedSessions: Boolean = true,
+            config: RuntimeConfig = RuntimeConfig(provider = provider),
+            graphDirectory: File? = null,
         ): OnnxTts = withContext(Dispatchers.IO) {
             val assets = context.assets
-            val env = OrtEnvironment.getEnvironment()
+            val env = environmentFor(config)
 
             val prefix = variant.id
-
-            val xnnpack = provider == Provider.XNNPACK
-            val options = sessionOptions(xnnpack)
-            val duration: OrtSession
-            val decode: OrtSession
-            if (useFileBackedSessions) {
-                val durationPath = materializeAsset(context, "$prefix/duration.onnx")
-                val decodePath = materializeAsset(context, "$prefix/decode.onnx")
-                duration = env.createSession(durationPath.absolutePath, options)
-                decode = env.createSession(decodePath.absolutePath, options)
+            val profileDir = if (config.enableProfiling) {
+                File(context.cacheDir, "ort-profile").also { it.mkdirs() }
             } else {
-                val durationBytes = assets.open("$prefix/duration.onnx").readBytes()
-                val decodeBytes = assets.open("$prefix/decode.onnx").readBytes()
-                duration = env.createSession(durationBytes, options)
-                decode = env.createSession(decodeBytes, options)
+                null
+            }
+
+            fun openSession(name: String): OrtSession {
+                val profilePath = profileDir?.let {
+                    File(it, "${config.profileFilePrefix ?: variant.id}-$name").absolutePath
+                }
+                val options = sessionOptions(config, profilePath)
+                try {
+                    if (graphDirectory != null) {
+                        val onnx = File(graphDirectory, name)
+                        val ort = File(graphDirectory, name.removeSuffix(".onnx") + ".ort")
+                        val path = when {
+                            ort.exists() -> ort.absolutePath
+                            onnx.exists() -> onnx.absolutePath
+                            else -> error("missing $name under $graphDirectory")
+                        }
+                        return env.createSession(path, options)
+                    }
+                    if (useFileBackedSessions) {
+                        val path = materializeAsset(context, "$prefix/$name")
+                        return env.createSession(path.absolutePath, options)
+                    }
+                    val bytes = assets.open("$prefix/$name").readBytes()
+                    return env.createSession(bytes, options)
+                } finally {
+                    options.close()
+                }
+            }
+
+            val durationSession = openSession("duration.onnx")
+            val decodeSession = try {
+                openSession("decode.onnx")
+            } catch (error: Exception) {
+                durationSession.close()
+                throw error
             }
             val tokenizer = PhonemeTokenizer.fromJson(
                 assets.open("symbols.json").bufferedReader().use { it.readText() }
             )
-            OnnxTts(env, duration, decode, tokenizer, phonemes, variant)
+            Log.i(
+                TAG,
+                "loaded ${variant.id}/${config.provider} threads=${config.intraOpThreads} " +
+                    "spin=${config.allowSpinning} globalPool=${config.useGlobalThreadPool} " +
+                    "nativeHeap=${Debug.getNativeHeapAllocatedSize() / 1_000_000}MB",
+            )
+            OnnxTts(env, durationSession, decodeSession, tokenizer, phonemes, variant, config)
         }
 
         private fun materializeAsset(context: Context, assetPath: String): File {

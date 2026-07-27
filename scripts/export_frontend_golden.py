@@ -234,8 +234,9 @@ CORPUS = (
 
 
 # Texts chosen to hit every branch of `split_text`: the sentence regex, the internal-mark
-# fallback, the whitespace fallback, the `limit // 2` guards and the mid-word cut, plus each
-# BOUNDARY_PAUSES key. `TextChunkerTest` grades the Kotlin port against these.
+# fallback, the whitespace fallback, the `limit // 2` guards and the mid-word cut, the
+# first-chunk TTFA budget, plus each BOUNDARY_PAUSES key. `TextChunkerTest` grades the
+# Kotlin port against these.
 CHUNKING_CORPUS = [
     # Short enough to stay whole.
     "Hello world.",
@@ -247,12 +248,12 @@ CHUNKING_CORPUS = [
     "Is this a question? Yes it is. Really! Wait; hold on: now, go.",
     # No terminal punctuation at all - falls to DEFAULT_PAUSE.
     "No punctuation here just words",
-    # Longer than the limit, with commas to break on.
+    # Longer than the first-chunk / subsequent limits, with commas to break on.
     ("A very long sentence that keeps going and going without stopping, "
      "and then continues past the limit with another clause, and still more text "
      "after that clause so the splitter has to make a second cut somewhere sensible, "
      "and finally it ends here after quite a lot of words indeed."),
-    # Longer than the limit with no internal marks - whitespace fallback.
+    # Longer than the subsequent limit with no internal marks - whitespace fallback.
     ("word " * 90).strip(),
     # Longer than the limit with no spaces at all - mid-word cut.
     "x" * 400,
@@ -262,6 +263,9 @@ CHUNKING_CORPUS = [
     "Bring pens, paper, etc. tomorrow before 9:00.",
     "The package is bound for the U.S.A. and should arrive tomorrow.",
     "Dr. Chen met Prof. Adler on St. Vincent Street.",
+    # First-chunk budget: one long sentence that must emit >1 chunk under FIRST_CHUNK_LIMIT.
+    ("This opening clause is intentionally long enough that the first synthesis chunk "
+     "must stop before the old 280-character budget, leaving a continuation for later."),
 ]
 
 

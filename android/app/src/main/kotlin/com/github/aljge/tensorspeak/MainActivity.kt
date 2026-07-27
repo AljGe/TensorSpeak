@@ -96,15 +96,25 @@ class MainActivity : ComponentActivity() {
             lifecycleScope.launch {
                 try {
                     val started = System.currentTimeMillis()
+                    var firstAudioMs = -1L
+                    var samples = 0
                     val variation = ModelPreferences.variation(this@MainActivity, engine.variant)
-                    val waveform = engine.synthesize(text, variation = variation)
+                    player.startStreaming()
+                    engine.synthesizeStreaming(text, variation = variation) { audio ->
+                        if (firstAudioMs < 0L) {
+                            firstAudioMs = System.currentTimeMillis() - started
+                        }
+                        samples += audio.size
+                        player.write(audio)
+                    }
                     val elapsed = System.currentTimeMillis() - started
-                    val seconds = waveform.size.toFloat() / OnnxTts.SAMPLE_RATE
-                    status.text = getString(R.string.synthesized, seconds, elapsed)
-                    player.play(waveform)
+                    val seconds = samples.toFloat() / OnnxTts.SAMPLE_RATE
+                    status.text = getString(R.string.synthesized, seconds, elapsed) +
+                        if (firstAudioMs >= 0L) " (ttfa ${firstAudioMs} ms)" else ""
                 } catch (error: Exception) {
                     // Most likely a phoneme outside the 178-symbol table; surface it rather
                     // than letting the activity die on arbitrary input.
+                    player.stop()
                     status.text = getString(R.string.synthesis_failed, error.message.orEmpty())
                 } finally {
                     speak.isEnabled = tts != null && !loadingModel
@@ -128,9 +138,9 @@ class MainActivity : ComponentActivity() {
         status.text = getString(R.string.model_loading, variant.label)
         lifecycleScope.launch {
             try {
-                tts?.close()
+                tts?.let { EngineRepository.release(it) }
                 tts = null
-                tts = OnnxTts.fromAssets(this@MainActivity, variant)
+                tts = EngineRepository.acquire(this@MainActivity, variant)
                 status.text = getString(R.string.ready, variant.label)
                 speak.isEnabled = true
             } catch (error: Exception) {
@@ -144,7 +154,8 @@ class MainActivity : ComponentActivity() {
 
     override fun onDestroy() {
         player.close()
-        tts?.close()
+        tts?.let { EngineRepository.releaseBlocking(it) }
+        tts = null
         super.onDestroy()
     }
 

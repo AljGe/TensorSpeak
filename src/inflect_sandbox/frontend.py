@@ -146,9 +146,28 @@ def phonemes_to_tokens(phoneme_text: str) -> np.ndarray:
     return with_blanks[None, :]
 
 
-def split_text(text: str, limit: int = 280, *, enhanced: bool = True) -> list[str]:
-    """Split into synthesis chunks: sentence-first, then on punctuation, then whitespace."""
+# Longest subsequent chunk handed to the graphs. The first emitted chunk additionally
+# obeys FIRST_CHUNK_LIMIT so time-to-first-audio stays bounded on long / expanded lines.
+CHUNK_LIMIT = 280
+FIRST_CHUNK_LIMIT = 96
+
+
+def split_text(
+    text: str,
+    limit: int = CHUNK_LIMIT,
+    first_chunk_limit: int = FIRST_CHUNK_LIMIT,
+    *,
+    enhanced: bool = True,
+) -> list[str]:
+    """Split into synthesis chunks: sentence-first, then on punctuation, then whitespace.
+
+    The first emitted chunk uses ``first_chunk_limit``; later chunks use ``limit``. Decode
+    cost scales with length and gates TTFA, so the opening piece stays short while later
+    pieces keep the larger throughput-oriented budget once playback has started.
+    """
     normalized = " ".join(text.split())
+    if not normalized:
+        return []
     if enhanced:
         protected = _protect_sentence_dots(normalized)
         sentences = [
@@ -161,20 +180,23 @@ def split_text(text: str, limit: int = 280, *, enhanced: bool = True) -> list[st
 
     chunks: list[str] = []
     for sentence in sentences or [normalized]:
-        while len(sentence) > limit:
-            search = sentence[: limit + 1]
+        remaining = sentence
+        while remaining:
+            current_limit = first_chunk_limit if not chunks else limit
+            if len(remaining) <= current_limit:
+                chunks.append(remaining)
+                break
+            search = remaining[: current_limit + 1]
             punctuation = max(search.rfind(mark) for mark in (",", ";", ":"))
             split_at = (
                 punctuation + 1
-                if punctuation >= limit // 2
-                else sentence.rfind(" ", 0, limit + 1)
+                if punctuation >= current_limit // 2
+                else remaining.rfind(" ", 0, current_limit + 1)
             )
-            if split_at < limit // 2:
-                split_at = limit
-            chunks.append(sentence[:split_at].strip())
-            sentence = sentence[split_at:].strip()
-        if sentence:
-            chunks.append(sentence)
+            if split_at < current_limit // 2:
+                split_at = current_limit
+            chunks.append(remaining[:split_at].strip())
+            remaining = remaining[split_at:].strip()
     return chunks
 
 

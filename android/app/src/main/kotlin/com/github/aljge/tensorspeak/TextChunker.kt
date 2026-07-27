@@ -10,15 +10,24 @@ package com.github.aljge.tensorspeak
  * the last sample of the last sentence was decoded).
  *
  * Splitting is sentence-first, then on internal punctuation, then on whitespace, so a chunk
- * boundary lands where a speaker would breathe.
+ * boundary lands where a speaker would breathe. The first emitted chunk additionally obeys
+ * [FIRST_CHUNK_LIMIT] so time-to-first-audio stays bounded even when a long sentence or a
+ * normalization-expanded money/date line would otherwise dominate decode time.
  *
  * Character classes are spelled out rather than using `\s`, for the ICU/OpenJDK reason
  * documented in [TextNormalizer].
  */
 internal object TextChunker {
 
-    /** Longest chunk handed to the graphs, in characters. `split_text(limit=280)`. */
+    /** Longest subsequent chunk handed to the graphs, in characters. `split_text(limit=280)`. */
     const val LIMIT = 280
+
+    /**
+     * Cap on the first synthesis chunk. Decode cost scales with utterance length, and the
+     * first chunk gates TTFA, so it stays shorter than [LIMIT]. Later chunks keep the larger
+     * limit because playback slack is already ample once audio has started.
+     */
+    const val FIRST_CHUNK_LIMIT = 96
 
     /** Pause inserted after a chunk, keyed by its final punctuation mark (seconds). */
     private val BOUNDARY_PAUSES = mapOf(
@@ -61,9 +70,14 @@ internal object TextChunker {
      *
      * Ported literally from `split_text`, including the `limit // 2` guards - a mark that
      * lands in the first half of the window is ignored, because breaking there would leave a
-     * chunk too short to carry sensible prosody.
+     * chunk too short to carry sensible prosody. The first emitted chunk uses
+     * [firstChunkLimit]; later chunks use [limit].
      */
-    fun split(text: String, limit: Int = LIMIT): List<String> {
+    fun split(
+        text: String,
+        limit: Int = LIMIT,
+        firstChunkLimit: Int = FIRST_CHUNK_LIMIT,
+    ): List<String> {
         val normalized = collapseWhitespace(text)
         if (normalized.isEmpty()) return emptyList()
 
@@ -76,10 +90,15 @@ internal object TextChunker {
         val chunks = mutableListOf<String>()
         for (sentence in sentences.ifEmpty { listOf(normalized) }) {
             var remaining = sentence
-            while (remaining.length > limit) {
-                val search = remaining.substring(0, limit + 1)
+            while (remaining.isNotEmpty()) {
+                val currentLimit = if (chunks.isEmpty()) firstChunkLimit else limit
+                if (remaining.length <= currentLimit) {
+                    chunks.add(remaining)
+                    break
+                }
+                val search = remaining.substring(0, currentLimit + 1)
                 val punctuation = INTERNAL_MARKS.maxOf { search.lastIndexOf(it) }
-                var splitAt = if (punctuation >= limit / 2) {
+                var splitAt = if (punctuation >= currentLimit / 2) {
                     punctuation + 1
                 } else {
                     // Python's `rfind(" ", 0, limit + 1)`: the space must sit inside the
@@ -87,11 +106,10 @@ internal object TextChunker {
                     search.lastIndexOf(' ')
                 }
                 // No usable break at all - cut mid-word rather than emit a runt chunk.
-                if (splitAt < limit / 2) splitAt = limit
+                if (splitAt < currentLimit / 2) splitAt = currentLimit
                 chunks.add(remaining.substring(0, splitAt).trim())
                 remaining = remaining.substring(splitAt).trim()
             }
-            if (remaining.isNotEmpty()) chunks.add(remaining)
         }
         return chunks
     }

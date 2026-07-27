@@ -20,7 +20,7 @@ After install, enable **TensorSpeak** under **Settings → Accessibility → Tex
 text → normalize → eSpeak-ng (IPA) → token ids → duration.onnx → decode.onnx → 24 kHz audio
 ```
 
-Duration expansion is inside `duration.onnx`; callers only add Gaussian `zp_noise` between the two graphs. Tensor names and shapes are documented in [docs/TENSOR_CONTRACT.md](docs/TENSOR_CONTRACT.md).
+Duration expansion is inside `duration.onnx`; callers only add Gaussian `zp_noise` between the two graphs. Tensor names and shapes are documented in [docs/TENSOR_CONTRACT.md](docs/TENSOR_CONTRACT.md). Latency levers and on-device benchmarks are in [docs/LATENCY.md](docs/LATENCY.md).
 
 The same pipeline is implemented twice: a **Python reference** (`src/inflect_sandbox/`, bit-exact vs upstream) and an **Android app** (`android/`, Kotlin + ONNX Runtime + vendored eSpeak-ng 1.52.0). Phoneme and token parity are tested against the reference; waveforms differ slightly on Android because the random number generator is not NumPy’s.
 

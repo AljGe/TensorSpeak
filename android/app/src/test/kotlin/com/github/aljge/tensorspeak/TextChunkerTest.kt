@@ -72,16 +72,30 @@ class TextChunkerTest {
     }
 
     @Test
-    fun `no chunk exceeds the limit`() {
+    fun `no chunk exceeds its limit`() {
         val rows = corpus()
         for (index in 0 until rows.length()) {
-            for (chunk in TextChunker.split(rows.getJSONObject(index).getString("text"))) {
+            val chunks = TextChunker.split(rows.getJSONObject(index).getString("text"))
+            chunks.forEachIndexed { position, chunk ->
+                val limit = if (position == 0) TextChunker.FIRST_CHUNK_LIMIT else TextChunker.LIMIT
                 assertTrue(
-                    "chunk of ${chunk.length} chars exceeds ${TextChunker.LIMIT}",
-                    chunk.length <= TextChunker.LIMIT,
+                    "chunk $position of ${chunk.length} chars exceeds $limit",
+                    chunk.length <= limit,
                 )
             }
         }
+    }
+
+    @Test
+    fun `first chunk stays under the TTFA budget`() {
+        val long =
+            "A very long sentence that keeps going and going without stopping, " +
+                "and then continues past the first-chunk limit with another clause, " +
+                "and still more text after that clause so the splitter has to cut."
+        val chunks = TextChunker.split(long)
+        assertTrue(chunks.size >= 2)
+        assertTrue(chunks.first().length <= TextChunker.FIRST_CHUNK_LIMIT)
+        assertTrue(chunks.drop(1).all { it.length <= TextChunker.LIMIT })
     }
 
     @Test

@@ -36,6 +36,20 @@ from .frontend import (
     variant_root,
 )
 
+
+def _normalize_for_chunking(text: str) -> str:
+    """Expand money/dates/etc. before splitting so the first-chunk budget is honest.
+
+    ``text_to_phonemes`` still re-normalizes each chunk; ``normalize_text`` is effectively
+    idempotent on its own output, so this only changes where chunk boundaries land.
+    """
+    from inflect_nano_v2_frontend import normalize_text  # noqa: PLC0415 - needs models on path
+
+    from .frontend import _install_upstream_path
+
+    _install_upstream_path()
+    return normalize_text(text)
+
 PROVIDER_ALIASES = {
     "cpu": "CPUExecutionProvider",
     "cuda": "CUDAExecutionProvider",
@@ -172,7 +186,10 @@ class InflectPipeline:
         if not 0.0 <= variation <= 1.0:
             raise ValueError("variation must be between 0.0 and 1.0")
 
-        chunks = split_text(normalized, enhanced=enhanced_prosody)
+        # Full normalizer first: raw character length under-counts money/date expansion and
+        # let the first decode dominate TTFA on short-looking input.
+        for_chunking = _normalize_for_chunking(normalized) or normalized
+        chunks = split_text(for_chunking, enhanced=enhanced_prosody)
         pieces: list[np.ndarray] = []
         traces: list[ChunkTrace] = []
 

@@ -23,9 +23,15 @@ class TensorSpeakTtsService : TextToSpeechService() {
     @Volatile
     private var stopRequested = false
 
+    @Volatile
+    private var warmedVariant: ModelVariant? = null
+
+    private var pcmScratch = ByteArray(0)
+
     override fun onDestroy() {
-        engine?.close()
+        engine?.let { EngineRepository.releaseBlocking(it) }
         engine = null
+        warmedVariant = null
         EspeakNative.release()
         super.onDestroy()
     }
@@ -44,18 +50,21 @@ class TensorSpeakTtsService : TextToSpeechService() {
     override fun onLoadLanguage(lang: String?, country: String?, variant: String?): Int {
         val availability = onIsLanguageAvailable(lang, country, variant)
         if (availability != TextToSpeech.LANG_NOT_SUPPORTED) {
-            // Warm the graphs and the eSpeak data copy so the first utterance is not slow.
+            // Warm newly created graphs once so the first real utterance is not cold.
             runCatching {
                 val warmed = requireEngine()
-                runBlocking {
-                    val variation = ModelPreferences.variation(applicationContext, warmed.variant)
-                    warmed.synthesizeStreaming(
-                        text = "Warm up.",
-                        speed = 1.0f,
-                        variation = variation,
-                        seed = 1L,
-                        shouldContinue = { true },
-                    ) { true }
+                if (warmedVariant != warmed.variant) {
+                    runBlocking {
+                        val variation = ModelPreferences.variation(applicationContext, warmed.variant)
+                        warmed.synthesizeStreaming(
+                            text = "Warm up.",
+                            speed = 1.0f,
+                            variation = variation,
+                            seed = 1L,
+                            shouldContinue = { true },
+                        ) { true }
+                    }
+                    warmedVariant = warmed.variant
                 }
             }
                 .onFailure { Log.e(TAG, "failed to load the engine", it) }
@@ -65,6 +74,7 @@ class TensorSpeakTtsService : TextToSpeechService() {
 
     override fun onStop() {
         stopRequested = true
+        engine?.requestStop()
     }
 
     override fun onSynthesizeText(request: SynthesisRequest?, callback: SynthesisCallback?) {
@@ -120,20 +130,19 @@ class TensorSpeakTtsService : TextToSpeechService() {
      * @return false if [onStop] arrived partway through.
      */
     private fun streamPcm(waveform: FloatArray, callback: SynthesisCallback): Boolean {
-        val maxSamples = (callback.maxBufferSize / BYTES_PER_SAMPLE).coerceAtLeast(1)
+        val maxSamples = (callback.maxBufferSize / PcmConverter.BYTES_PER_SAMPLE).coerceAtLeast(1)
+        val needed = maxSamples * PcmConverter.BYTES_PER_SAMPLE
+        if (pcmScratch.size < needed) {
+            pcmScratch = ByteArray(needed)
+        }
         var offset = 0
         while (offset < waveform.size) {
             if (stopRequested) return false
             val count = minOf(maxSamples, waveform.size - offset)
-            val bytes = ByteArray(count * BYTES_PER_SAMPLE)
-            for (index in 0 until count) {
-                val clamped = waveform[offset + index].coerceIn(-1.0f, 1.0f)
-                val sample = (clamped * Short.MAX_VALUE).toInt()
-                // Little-endian, as ENCODING_PCM_16BIT expects.
-                bytes[index * 2] = (sample and 0xFF).toByte()
-                bytes[index * 2 + 1] = ((sample shr 8) and 0xFF).toByte()
-            }
-            if (callback.audioAvailable(bytes, 0, bytes.size) != TextToSpeech.SUCCESS) {
+            PcmConverter.floatToPcm16(waveform, offset, count, pcmScratch)
+            if (callback.audioAvailable(pcmScratch, 0, count * PcmConverter.BYTES_PER_SAMPLE)
+                != TextToSpeech.SUCCESS
+            ) {
                 return false
             }
             offset += count
@@ -146,14 +155,11 @@ class TensorSpeakTtsService : TextToSpeechService() {
         val preferred = ModelPreferences.get(applicationContext)
         engine?.let { current ->
             if (current.variant == preferred) return current
-            current.close()
+            EngineRepository.releaseBlocking(current)
             engine = null
+            warmedVariant = null
         }
-        // fromAssets is suspend only because it does file I/O; we are already off the main
-        // thread here, so blocking is fine.
-        val created = runBlocking {
-            OnnxTts.fromAssets(applicationContext, preferred)
-        }
+        val created = EngineRepository.acquireBlocking(applicationContext, preferred)
         engine = created
         return created
     }
@@ -163,7 +169,6 @@ class TensorSpeakTtsService : TextToSpeechService() {
 
     private companion object {
         const val TAG = "TensorSpeakTtsService"
-        const val BYTES_PER_SAMPLE = 2
         const val MIN_SPEED = 0.5f
         const val MAX_SPEED = 2.0f
     }
