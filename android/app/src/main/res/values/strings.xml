@@ -10,7 +10,12 @@
     <string name="tts_engine_label">TensorSpeak</string>
     <string name="model_label">Model</string>
     <string name="quality_label">Quality profile</string>
+    <string name="backend_label">Runtime backend</string>
+    <string name="latency_label">Start latency</string>
+    <string name="threads_label">CPU threads</string>
+    <string name="experimental_hint">NNAPI / XNNPACK / thread overrides are experimental. They can be faster or slower by device; the app falls back to CPU if a backend fails to load. Changes also apply to system TTS.</string>
     <string name="model_loading">Loading %1$s…</string>
+    <string name="ready_detail">Ready · %1$s · %2$s · %3$s</string>
     <string name="open_source_licenses">Open source licenses</string>
     <string name="licenses_title">Open source licenses</string>
 </resources>

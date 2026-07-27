@@ -14,7 +14,8 @@ without audio regressions.
 | One-shot language warm-up; ORT `RunOptions.setTerminate` on stop | production |
 | Fused edge-fade / clip / PCM16 with reused scratch buffer | production |
 | Preview `AudioTrack` streaming in `MainActivity` | production |
-| Injectable `RuntimeConfig` (threads, spin, global pool, NNAPI) | production + bench |
+| Experimental · NNAPI / XNNPACK / thread overrides | opt-in in settings UI (falls back to CPU) |
+| First-chunk latency profile (64 / 96 / 280) | opt-in in settings UI |
 
 ## Benchmark entry points
 

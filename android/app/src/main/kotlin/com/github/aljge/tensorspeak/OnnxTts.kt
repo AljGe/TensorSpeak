@@ -81,6 +81,7 @@ class OnnxTts private constructor(
         speed: Float = 1.0f,
         variation: Float? = null,
         seed: Long = 0L,
+        firstChunkLimit: Int = TextChunker.FIRST_CHUNK_LIMIT,
         shouldContinue: () -> Boolean = { true },
         onChunkTiming: ((StageTimings) -> Unit)? = null,
         onAudio: (FloatArray) -> Boolean,
@@ -89,13 +90,13 @@ class OnnxTts private constructor(
         require(speed in 0.5f..2.0f) { "speed must be between 0.5 and 2.0" }
         require(selectedVariation in 0.0f..1.0f) { "variation must be between 0.0 and 1.0" }
 
-        // Expand money/dates before splitting so FIRST_CHUNK_LIMIT bounds real decode cost.
+        // Expand money/dates before splitting so the first-chunk budget bounds real decode cost.
         val normalizeStarted = System.nanoTime()
         val forChunking = TextNormalizer.normalize(text).ifBlank {
             TextChunker.collapseWhitespace(text)
         }
         val normalizeMs = (System.nanoTime() - normalizeStarted) / 1e6
-        val chunks = TextChunker.split(forChunking)
+        val chunks = TextChunker.split(forChunking, firstChunkLimit = firstChunkLimit)
         for ((index, chunk) in chunks.withIndex()) {
             if (!shouldContinue()) return@withContext
             if (index > 0) {

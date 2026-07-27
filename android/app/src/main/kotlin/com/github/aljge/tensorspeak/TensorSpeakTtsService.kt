@@ -24,14 +24,14 @@ class TensorSpeakTtsService : TextToSpeechService() {
     private var stopRequested = false
 
     @Volatile
-    private var warmedVariant: ModelVariant? = null
+    private var warmedKey: String? = null
 
     private var pcmScratch = ByteArray(0)
 
     override fun onDestroy() {
         engine?.let { EngineRepository.releaseBlocking(it) }
         engine = null
-        warmedVariant = null
+        warmedKey = null
         EspeakNative.release()
         super.onDestroy()
     }
@@ -53,7 +53,8 @@ class TensorSpeakTtsService : TextToSpeechService() {
             // Warm newly created graphs once so the first real utterance is not cold.
             runCatching {
                 val warmed = requireEngine()
-                if (warmedVariant != warmed.variant) {
+                val key = engineKey(warmed)
+                if (warmedKey != key) {
                     runBlocking {
                         val variation = ModelPreferences.variation(applicationContext, warmed.variant)
                         warmed.synthesizeStreaming(
@@ -61,10 +62,12 @@ class TensorSpeakTtsService : TextToSpeechService() {
                             speed = 1.0f,
                             variation = variation,
                             seed = 1L,
+                            firstChunkLimit = ModelPreferences.latencyProfile(applicationContext)
+                                .firstChunkLimit,
                             shouldContinue = { true },
                         ) { true }
                     }
-                    warmedVariant = warmed.variant
+                    warmedKey = key
                 }
             }
                 .onFailure { Log.e(TAG, "failed to load the engine", it) }
@@ -100,11 +103,13 @@ class TensorSpeakTtsService : TextToSpeechService() {
 
             var delivered = true
             val variation = ModelPreferences.variation(applicationContext, engine.variant)
+            val firstChunkLimit = ModelPreferences.latencyProfile(applicationContext).firstChunkLimit
             runBlocking {
                 engine.synthesizeStreaming(
                     text = text,
                     speed = speed,
                     variation = variation,
+                    firstChunkLimit = firstChunkLimit,
                     shouldContinue = { !stopRequested },
                 ) { audio ->
                     streamPcm(audio, callback).also { delivered = it }
@@ -153,16 +158,31 @@ class TensorSpeakTtsService : TextToSpeechService() {
     @Synchronized
     private fun requireEngine(): OnnxTts {
         val preferred = ModelPreferences.get(applicationContext)
+        val config = ModelPreferences.runtimeConfig(applicationContext)
         engine?.let { current ->
-            if (current.variant == preferred) return current
+            if (current.variant == preferred && current.runtimeConfig == config) return current
             EngineRepository.releaseBlocking(current)
             engine = null
-            warmedVariant = null
+            warmedKey = null
         }
-        val created = EngineRepository.acquireBlocking(applicationContext, preferred)
+        val created = try {
+            EngineRepository.acquireBlocking(applicationContext, preferred, config)
+        } catch (error: Exception) {
+            if (config.provider == OnnxTts.Provider.CPU) throw error
+            Log.w(TAG, "${config.provider} unavailable, falling back to CPU", error)
+            ModelPreferences.setExecutionBackend(applicationContext, ExecutionBackend.CPU)
+            EngineRepository.acquireBlocking(
+                applicationContext,
+                preferred,
+                ModelPreferences.runtimeConfig(applicationContext),
+            )
+        }
         engine = created
         return created
     }
+
+    private fun engineKey(engine: OnnxTts): String =
+        "${engine.variant.id}/${engine.runtimeConfig}"
 
     private fun isEnglish(lang: String?): Boolean =
         lang.equals("eng", ignoreCase = true) || lang.equals("en", ignoreCase = true)

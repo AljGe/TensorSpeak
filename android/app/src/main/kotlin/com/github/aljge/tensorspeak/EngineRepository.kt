@@ -18,7 +18,7 @@ object EngineRepository {
     suspend fun acquire(
         context: Context,
         variant: ModelVariant = ModelPreferences.get(context),
-        config: RuntimeConfig = RuntimeConfig.DEFAULT,
+        config: RuntimeConfig = ModelPreferences.runtimeConfig(context),
     ): OnnxTts = mutex.withLock {
         val current = engine
         if (current != null &&
@@ -46,7 +46,7 @@ object EngineRepository {
     fun acquireBlocking(
         context: Context,
         variant: ModelVariant = ModelPreferences.get(context),
-        config: RuntimeConfig = RuntimeConfig.DEFAULT,
+        config: RuntimeConfig = ModelPreferences.runtimeConfig(context),
     ): OnnxTts = runBlocking { acquire(context, variant, config) }
 
     suspend fun release(instance: OnnxTts) = mutex.withLock {
