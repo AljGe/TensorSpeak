@@ -11,8 +11,11 @@ package com.fastt.inflect
  * match differently - so the sequence in [normalize] mirrors the Python line for line. Change
  * one and `TextNormalizerTest` (which checks every row of the golden corpus) will tell you.
  *
- * Patterns are compiled with `(?U)` so `\d`, `\w` and `\s` carry Python's Unicode semantics
- * rather than Java's ASCII defaults.
+ * Character classes are written out explicitly rather than using `\d` / `\s`: Android's regex
+ * engine is ICU-backed and Unicode-aware by default, desktop OpenJDK's is ASCII by default,
+ * and ICU rejects the `(?U)` flag that would have reconciled the two. `\b` is the one
+ * construct still left to the engine, so word boundaries adjacent to non-ASCII letters are
+ * the remaining place the two runtimes can disagree.
  */
 object TextNormalizer {
 
@@ -61,34 +64,54 @@ object TextNormalizer {
         '(' to ", ", ')' to ", ", '[' to ", ", ']' to ", ", '{' to ", ", '}' to ", ",
     )
 
-    private const val U = "(?U)"
+    // Every character class below is spelled out rather than relying on \d / \s, because the
+    // two runtimes disagree about what those mean: Android's java.util.regex is ICU-backed
+    // and Unicode-aware by default, desktop OpenJDK's is ASCII by default, and ICU rejects
+    // the (?U) flag that would have reconciled them. Explicit classes behave identically on
+    // both, so the JVM test really does exercise what ships.
 
-    private val WHITESPACE = Regex("$U\\s+")
-    private val INITIALS = Regex("$U\\b([A-Z])(?:\\.([A-Z]))+\\.")
+    /** Python's `\s`: ASCII whitespace plus the Unicode separators. */
+    private const val WS = "[ \\t\\n\\u000B\\u000C\\r\\u001C-\\u001F\\u0085\\u00A0\\u1680" +
+        "\\u2000-\\u200A\\u2028\\u2029\\u202F\\u205F\\u3000]"
+    private const val NOT_WS = "[^ \\t\\n\\u000B\\u000C\\r\\u001C-\\u001F\\u0085\\u00A0\\u1680" +
+        "\\u2000-\\u200A\\u2028\\u2029\\u202F\\u205F\\u3000]"
+
+    /**
+     * ASCII digits only. Python's `\d` also matches e.g. Arabic-Indic digits; those fall
+     * through to eSpeak here instead of being spelled out. No corpus row covers it, and the
+     * alternative - ICU semantics on device, ASCII on the JVM - would make the two diverge.
+     */
+    private const val D = "[0-9]"
+
+    /** The same restriction applied outside the regexes; `Char.isDigit()` is Unicode-aware. */
+    private val ASCII_DIGITS = '0'..'9'
+
+    private val WHITESPACE = Regex("$WS+")
+    private val INITIALS = Regex("\\b([A-Z])(?:\\.([A-Z]))+\\.")
     private val UPPERCASE_RUN = Regex("[A-Z]")
     private val LABELED_IDENTIFIER = Regex(
-        "$U\\b(apartment|apt\\.?|suite|unit|room|flight|extension|order|invoice|locker|aisle|gate)" +
-            "\\s+([A-Za-z]?\\d{1,4}[A-Za-z]?)\\b",
+        "\\b(apartment|apt\\.?|suite|unit|room|flight|extension|order|invoice|locker|aisle|gate)" +
+            "$WS+([A-Za-z]?$D{1,4}[A-Za-z]?)\\b",
         RegexOption.IGNORE_CASE,
     )
     private val STREET_NUMBER =
-        Regex("$U\\b(\\d{3})(?=\\s+(?:North|South|East|West)\\b)", RegexOption.IGNORE_CASE)
-    private val MONEY = Regex("$U\\$(\\d[\\d,]*(?:\\.\\d{1,2})?)")
+        Regex("\\b($D{3})(?=$WS+(?:North|South|East|West)\\b)", RegexOption.IGNORE_CASE)
+    private val MONEY = Regex("\\$($D[$D,]*(?:\\.$D{1,2})?)")
     private val DATE_SLASH =
-        Regex("$U\\b(0?[1-9]|1[0-2])/(0?[1-9]|[12]\\d|3[01])/(20\\d{2}|19\\d{2})\\b")
-    private val TIME = Regex("$U\\b(\\d{1,2}):(\\d{2})\\s*([AaPp]\\.?\\s*[Mm]\\.?)?\\b")
-    private val BARE_HOUR_TIME = Regex("$U\\b(\\d{1,2})\\s*([AaPp]\\.?\\s*[Mm]\\.?)\\b")
-    private val PHONE = Regex("$U\\b(\\d{3})-(\\d{4})\\b")
-    private val VERSION = Regex("$U\\b\\d+(?:\\.\\d+){2,}\\b")
-    private val DECIMAL = Regex("$U\\b(\\d+)\\.(\\d+)\\b")
-    private val ORDINAL = Regex("$U\\b(\\d+)(st|nd|rd|th)\\b", RegexOption.IGNORE_CASE)
-    private val NUMBER = Regex("$U\\b\\d[\\d,]*\\b")
-    private val ACRONYM = Regex("$U\\b[A-Z]{2,}\\b")
-    private val REPEATED_COMMA = Regex("$U,(?:\\s*,)+")
-    private val COMMA_BEFORE_STOP = Regex("$U,\\s*([.!?])")
-    private val SPACE_BEFORE_PUNCT = Regex("$U\\s+([,;:.!?])")
-    private val PUNCT_NEEDS_SPACE = Regex("$U([,;:.!?])(?=\\S)")
-    private val IDENTIFIER_TOKEN = Regex("$U([A-Za-z]?)(\\d+)([A-Za-z]?)")
+        Regex("\\b(0?[1-9]|1[0-2])/(0?[1-9]|[12]$D|3[01])/(20$D{2}|19$D{2})\\b")
+    private val TIME = Regex("\\b($D{1,2}):($D{2})$WS*([AaPp]\\.?$WS*[Mm]\\.?)?\\b")
+    private val BARE_HOUR_TIME = Regex("\\b($D{1,2})$WS*([AaPp]\\.?$WS*[Mm]\\.?)\\b")
+    private val PHONE = Regex("\\b($D{3})-($D{4})\\b")
+    private val VERSION = Regex("\\b$D+(?:\\.$D+){2,}\\b")
+    private val DECIMAL = Regex("\\b($D+)\\.($D+)\\b")
+    private val ORDINAL = Regex("\\b($D+)(st|nd|rd|th)\\b", RegexOption.IGNORE_CASE)
+    private val NUMBER = Regex("\\b$D[$D,]*\\b")
+    private val ACRONYM = Regex("\\b[A-Z]{2,}\\b")
+    private val REPEATED_COMMA = Regex(",(?:$WS*,)+")
+    private val COMMA_BEFORE_STOP = Regex(",$WS*([.!?])")
+    private val SPACE_BEFORE_PUNCT = Regex("$WS+([,;:.!?])")
+    private val PUNCT_NEEDS_SPACE = Regex("([,;:.!?])(?=$NOT_WS)")
+    private val IDENTIFIER_TOKEN = Regex("([A-Za-z]?)($D+)([A-Za-z]?)")
     private val NON_LETTER = Regex("[^A-Za-z]")
 
     /** `_words()`: spell a number, then flatten hyphens and drop the group commas. */
@@ -99,13 +122,14 @@ object TextNormalizer {
 
     /** `_digit_words()`: every digit spelled out individually. */
     private fun digitWords(text: String): String =
-        text.filter { it.isDigit() }.toList().joinToString(" ") { words(it.digitToInt().toLong()) }
+        text.filter { it in ASCII_DIGITS }.toList()
+            .joinToString(" ") { words(it.digitToInt().toLong()) }
 
     /** `_identifier_digits()`: like [digitWords], but a non-leading zero is "oh". */
     private fun identifierDigits(text: String): String {
         val pieces = mutableListOf<String>()
         for ((index, character) in text.withIndex()) {
-            if (!character.isDigit()) continue
+            if (character !in ASCII_DIGITS) continue
             pieces.add(
                 if (character == '0' && index > 0) "oh" else words(character.digitToInt().toLong())
             )
@@ -175,10 +199,10 @@ object TextNormalizer {
         result = WHITESPACE.replace(result, " ").trim()
 
         for ((source, replacement) in WORD_OVERRIDES) {
-            result = Regex("$U\\b${Regex.escape(source)}\\b").replace(result, replacement)
+            result = Regex("\\b${Regex.escape(source)}\\b").replace(result, replacement)
         }
         for ((source, replacement) in ABBREVIATIONS) {
-            result = Regex("$U\\b${Regex.escape(source)}", RegexOption.IGNORE_CASE)
+            result = Regex("\\b${Regex.escape(source)}", RegexOption.IGNORE_CASE)
                 .replace(result, replacement)
         }
 

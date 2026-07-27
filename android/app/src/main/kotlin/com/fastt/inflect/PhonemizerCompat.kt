@@ -21,14 +21,21 @@ internal object PhonemizerCompat {
     /** `Punctuation._DEFAULT_MARKS`. */
     private const val DEFAULT_MARKS = ";:,.!?¡¿—…\"«»“”(){}[]"
 
+    /**
+     * Python's `\s`, spelled out. Android's ICU regex and desktop OpenJDK disagree about what
+     * `\s` covers, and ICU rejects `(?U)`; see the note in [TextNormalizer].
+     */
+    private const val WS = "[ \\t\\n\\u000B\\u000C\\r\\u001C-\\u001F\\u0085\\u00A0\\u1680" +
+        "\\u2000-\\u200A\\u2028\\u2029\\u202F\\u205F\\u3000]"
+
     /** `(\s*[marks]+\s*)+` - a mark run plus any whitespace hugging it. */
-    private val MARKS_RE = Regex("(?U)(\\s*[${Regex.escape(DEFAULT_MARKS)}]+\\s*)+")
+    private val MARKS_RE = Regex("($WS*[${Regex.escape(DEFAULT_MARKS)}]+$WS*)+")
 
     private const val WORD_SEPARATOR = " "
 
     private val UNDERSCORE_RUN = Regex("_+")
     private val UNDERSCORE_SPACE = Regex("_ ")
-    private val WHITESPACE = Regex("(?U)\\s+")
+    private val WHITESPACE = Regex("$WS+")
 
     /** Where a mark sat relative to the text it was pulled out of. */
     private enum class Position { BEGIN, END, MIDDLE, ALONE }
