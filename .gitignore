@@ -96,5 +96,9 @@ signing.properties
 .signing.env
 sherpa-onnx-1.13.4-arm64-v8a-eng-tts-engine-vits-inflect-en-micro-v2.apk
 
+# Cloud TTS smoke-test credentials (Deepgram / custom worker URL)
+.cloud.env
+
 # Wrangler's local state (account id, cached auth) — never commit.
 cloudflare-worker/.wrangler/
+.cloud.env.example

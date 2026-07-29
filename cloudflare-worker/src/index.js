@@ -1,8 +1,8 @@
 // Minimal TTS endpoint backed by Cloudflare Workers AI (@cf/myshell-ai/melotts).
 // Accepts { "input": "..." } or { "text": "..." } (OpenAI /audio/speech-compatible
 // body is also accepted; `voice`/`model`/`response_format` fields are ignored) and
-// returns 24kHz mono audio/wav bytes, matching what TensorSpeak's "custom" cloud
-// provider expects.
+// returns audio bytes (MP3 from MeloTTS), matching what TensorSpeak's "custom" cloud
+// provider expects (AudioBlobDecoder accepts wav or mp3).
 
 const MAX_INPUT_CHARS = 4096;
 const SUPPORTED_LANGS = new Set(["en", "es", "fr", "zh", "jp", "kr"]);
@@ -12,6 +12,26 @@ function jsonError(message, status) {
     status,
     headers: { "Content-Type": "application/json" },
   });
+}
+
+/** Normalize Workers AI melotts output to raw audio bytes. */
+function audioBytes(result) {
+  if (result == null) return null;
+  if (typeof result === "string") {
+    // base64 mp3
+    const bin = atob(result);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return bytes;
+  }
+  if (result instanceof ArrayBuffer) return new Uint8Array(result);
+  if (ArrayBuffer.isView(result)) {
+    return new Uint8Array(result.buffer, result.byteOffset, result.byteLength);
+  }
+  if (typeof result === "object" && typeof result.audio === "string") {
+    return audioBytes(result.audio);
+  }
+  return null;
 }
 
 export default {
@@ -47,10 +67,16 @@ export default {
     const lang = SUPPORTED_LANGS.has(body.lang) ? body.lang : "en";
 
     try {
-      const audio = await env.AI.run("@cf/myshell-ai/melotts", { text, lang });
-      return new Response(audio, {
+      // Workers AI schema uses `prompt` (not `text`) for @cf/myshell-ai/melotts.
+      const result = await env.AI.run("@cf/myshell-ai/melotts", { prompt: text, lang });
+      const bytes = audioBytes(result);
+      if (!bytes || bytes.byteLength === 0) {
+        return jsonError("empty audio from Workers AI", 500);
+      }
+      return new Response(bytes, {
         headers: {
-          "Content-Type": "audio/wav",
+          // MeloTTS returns MP3; TensorSpeak's AudioBlobDecoder handles both wav and mp3.
+          "Content-Type": "audio/mpeg",
           "Cache-Control": "no-store",
         },
       });

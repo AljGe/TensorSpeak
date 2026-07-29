@@ -37,10 +37,19 @@ same value in the custom provider's API key field.
 curl -X POST https://tensorspeak-tts.<subdomain>.workers.dev \
   -H "Content-Type: application/json" \
   -d '{"input":"Testing my free Cloudflare Workers AI speech engine."}' \
-  --output test_audio.wav
+  --output test_audio.mp3
 ```
 
 Add `-H "Authorization: Bearer <secret>"` if you set `SHARED_SECRET`.
+
+Or use the repo smoke test (also covers Deepgram): copy [`.cloud.env.example`](../.cloud.env.example)
+to `.cloud.env`, set `CUSTOM_BASE_URL` (and optionally `DEEPGRAM_API_KEY`), then:
+
+```bash
+./scripts/test_cloud_tts.sh
+```
+
+MeloTTS returns **MP3**; TensorSpeak's custom provider accepts that via `AudioBlobDecoder`.
 
 ## Wiring into TensorSpeak
 
@@ -49,5 +58,5 @@ In the app's "Cloud voices" settings section, under the custom provider:
 - **API key**: the `SHARED_SECRET` value, if set — otherwise leave blank.
 - Leave model/voice fields blank; this worker ignores them.
 
-Request/response shape: `POST {input: string, lang?: string}` -> `audio/wav` bytes.
+Request/response shape: `POST {input: string, lang?: string}` -> `audio/mpeg` (MP3) bytes.
 `lang` defaults to `"en"`; supported values are `en`, `es`, `fr`, `zh`, `jp`, `kr`.

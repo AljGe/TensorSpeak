@@ -7,6 +7,7 @@ import org.json.JSONObject
  * `{base_url}/audio/speech` shape (what the bundled `cloudflare-worker/` also accepts); when
  * [CloudVoiceSelection.Custom.useSimpleBody] is set, posts directly to `base_url` with just
  * `{"input": text}`, for simple servers that don't speak the OpenAI schema.
+ * Response may be WAV or MP3 — [AudioBlobDecoder] handles both.
  */
 object CustomCloudTtsRequest {
     fun build(text: String, selection: CloudVoiceSelection.Custom): CloudTtsHttpRequest {
