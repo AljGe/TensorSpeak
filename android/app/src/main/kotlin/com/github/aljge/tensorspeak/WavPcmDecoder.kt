@@ -64,10 +64,15 @@ object WavPcmDecoder {
         require(dataOffset >= 0) { "wav missing data chunk" }
         require(channels >= 1) { "wav has no channels" }
 
+        // Deepgram (and some other streaming encoders) write a sentinel data-chunk size
+        // like 0x7FFF0024 / 0xFFFFFFFF instead of the real byte count. Clamp to the file.
+        val available = (bytes.size - dataOffset).coerceAtLeast(0)
+        val safeDataSize = dataSize.coerceIn(0, available)
+
         val bytesPerSample = bitsPerSample / 8
         val frameSize = bytesPerSample * channels
-        val frameCount = if (frameSize > 0) dataSize / frameSize else 0
-        val data = ByteBuffer.wrap(bytes, dataOffset, dataSize).order(ByteOrder.LITTLE_ENDIAN)
+        val frameCount = if (frameSize > 0) safeDataSize / frameSize else 0
+        val data = ByteBuffer.wrap(bytes, dataOffset, safeDataSize).order(ByteOrder.LITTLE_ENDIAN)
 
         val samples = FloatArray(frameCount)
         for (frame in 0 until frameCount) {

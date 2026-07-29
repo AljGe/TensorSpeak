@@ -228,6 +228,7 @@ class MainActivity : ComponentActivity() {
                 val previous = VoicePreferences.resolvedDefaultVoiceName(this@MainActivity)
                 if (voice.name == previous) return
                 VoicePreferences.setDefaultVoice(this@MainActivity, voice.name)
+                sendBroadcast(Intent(TextToSpeech.Engine.ACTION_TTS_DATA_INSTALLED))
                 val target = CloudVoiceCatalog.resolve(this@MainActivity, voice.name)
                 if (target is VoiceTarget.OnDevice && tts?.variant != target.variant) {
                     reloadEngine(status, speak)

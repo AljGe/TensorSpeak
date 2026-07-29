@@ -70,6 +70,24 @@ class WavPcmDecoderTest {
         assertFalse(WavPcmDecoder.looksLikeWav(ByteArray(4)))
     }
 
+    @Test
+    fun `clamps Deepgram-style sentinel data chunk sizes`() {
+        // Deepgram writes data size 0x7FFF0024 (or similar) instead of the real length.
+        val samples = shortArrayOf(0, 1000, -1000, 2000)
+        val real = buildWav(sampleRate = 24_000, channels = 1, samples = samples)
+        val corrupt = real.copyOf()
+        // Overwrite the 4-byte data-chunk size at offset 40 (RIFF/WAVE/fmt(24)/data-id).
+        val sentinel = 0x7FFF0024
+        corrupt[40] = (sentinel and 0xFF).toByte()
+        corrupt[41] = ((sentinel shr 8) and 0xFF).toByte()
+        corrupt[42] = ((sentinel shr 16) and 0xFF).toByte()
+        corrupt[43] = ((sentinel shr 24) and 0xFF).toByte()
+
+        val decoded = WavPcmDecoder.decode(corrupt)
+        assertEquals(24_000, decoded.sampleRate)
+        assertEquals(samples.size, decoded.samples.size)
+    }
+
     @Test(expected = IllegalArgumentException::class)
     fun `rejects a truncated header`() {
         WavPcmDecoder.decode(byteArrayOf(1, 2, 3))

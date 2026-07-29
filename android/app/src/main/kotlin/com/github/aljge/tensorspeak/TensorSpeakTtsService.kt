@@ -83,27 +83,36 @@ class TensorSpeakTtsService : TextToSpeechService() {
     override fun onLoadLanguage(lang: String?, country: String?, variant: String?): Int {
         val availability = onIsLanguageAvailable(lang, country, variant)
         if (availability != TextToSpeech.LANG_NOT_SUPPORTED) {
+            // Align the active voice with the in-app default whenever a client loads English.
+            // Many apps only call setLanguage() and never setVoice(), so without this the
+            // service would keep a stale on-device loadedTarget from a prior utterance.
+            val defaultName = VoicePreferences.resolvedDefaultVoiceName(applicationContext)
+            CloudVoiceCatalog.resolve(applicationContext, defaultName)?.let { loadedTarget = it }
+
             // Warm newly created graphs once so the first real utterance is not cold.
-            runCatching {
-                val warmed = requireEngine()
-                val key = engineKey(warmed)
-                if (warmedKey != key) {
-                    runBlocking {
-                        val variation = ModelPreferences.variation(applicationContext, warmed.variant)
-                        warmed.synthesizeStreaming(
-                            text = "Warm up.",
-                            speed = 1.0f,
-                            variation = variation,
-                            seed = 1L,
-                            firstChunkLimit = ModelPreferences.latencyProfile(applicationContext)
-                                .firstChunkLimit,
-                            shouldContinue = { true },
-                        ) { true }
+            // Cloud defaults skip the ONNX warm-up — no local graphs are needed.
+            if (loadedTarget is VoiceTarget.OnDevice || loadedTarget == null) {
+                runCatching {
+                    val warmed = requireEngine()
+                    val key = engineKey(warmed)
+                    if (warmedKey != key) {
+                        runBlocking {
+                            val variation = ModelPreferences.variation(applicationContext, warmed.variant)
+                            warmed.synthesizeStreaming(
+                                text = "Warm up.",
+                                speed = 1.0f,
+                                variation = variation,
+                                seed = 1L,
+                                firstChunkLimit = ModelPreferences.latencyProfile(applicationContext)
+                                    .firstChunkLimit,
+                                shouldContinue = { true },
+                            ) { true }
+                        }
+                        warmedKey = key
                     }
-                    warmedKey = key
                 }
+                    .onFailure { Log.e(TAG, "failed to load the engine", it) }
             }
-                .onFailure { Log.e(TAG, "failed to load the engine", it) }
         }
         return availability
     }
@@ -130,19 +139,31 @@ class TensorSpeakTtsService : TextToSpeechService() {
         // API accepts a speed multiplier directly, ElevenLabs/custom endpoints ignore it.
         val speed = (request.speechRate / 100.0f).coerceIn(MIN_SPEED, MAX_SPEED)
 
-        // Prefer an explicitly loaded voice; otherwise honor the app's default (which may be
-        // a cloud voice once an API key is configured).
-        val target = loadedTarget
-            ?: CloudVoiceCatalog.resolve(
-                applicationContext,
-                VoicePreferences.resolvedDefaultVoiceName(applicationContext),
-            )
+        // Prefer the voice named on the request (setVoice / framework default). Fall back to
+        // the last onLoadVoice target, then the in-app default. Never keep a sticky on-device
+        // loadedTarget when the request asks for a cloud voice (or vice versa).
+        val requestedName = request.voiceName?.takeIf { it.isNotEmpty() }
+        val target = resolveSynthesisTarget(requestedName)
 
         when (target) {
             is VoiceTarget.Cloud -> synthesizeCloud(text, speed, target.selection, callback)
             is VoiceTarget.OnDevice -> synthesizeOnDevice(text, speed, target.variant, callback)
-            null -> synthesizeOnDevice(text, speed, null, callback)
         }
+    }
+
+    private fun resolveSynthesisTarget(requestedName: String?): VoiceTarget {
+        requestedName?.let { name ->
+            CloudVoiceCatalog.resolve(applicationContext, name)?.let {
+                loadedTarget = it
+                return it
+            }
+        }
+        loadedTarget?.let { return it }
+        val fallbackName = VoicePreferences.resolvedDefaultVoiceName(applicationContext)
+        val resolved = CloudVoiceCatalog.resolve(applicationContext, fallbackName)
+            ?: VoiceTarget.OnDevice(ModelPreferences.get(applicationContext))
+        loadedTarget = resolved
+        return resolved
     }
 
     private fun synthesizeOnDevice(

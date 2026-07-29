@@ -13,15 +13,10 @@ class AudioPlayer : Closeable {
 
     /** Blocking play of a complete waveform (tests / short clips). */
     fun play(waveform: FloatArray, sampleRate: Int = OnnxTts.SAMPLE_RATE) {
-        stop()
-        sampleRateHz = sampleRate
-        val newTrack = buildTrack(
-            bufferBytes = maxOf(minBufferBytes(), waveform.size * Float.SIZE_BYTES),
-            mode = AudioTrack.MODE_STATIC,
-        )
-        newTrack.write(waveform, 0, waveform.size, AudioTrack.WRITE_BLOCKING)
-        newTrack.play()
-        track = newTrack
+        // Stream in chunks — MODE_STATIC fails on large Deepgram replies and some OEMs
+        // reject oversized static buffers.
+        startStreaming(sampleRate)
+        write(waveform)
     }
 
     /**

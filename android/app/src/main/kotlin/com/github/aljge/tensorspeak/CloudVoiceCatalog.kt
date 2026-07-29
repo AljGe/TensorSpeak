@@ -38,9 +38,22 @@ object CloudVoiceCatalog {
             }
         }
         if (CloudTtsPreferences.customBaseUrl(context).isNotEmpty()) {
-            for (slot in CloudTtsPreferences.customVoiceSlots(context)) {
-                voices.add(cloudVoice("custom-${slot.slug}", "Custom · ${slot.label}"))
+            val slots = CloudTtsPreferences.customVoiceSlots(context)
+            if (slots.isEmpty()) {
+                // Base URL alone is enough for MeloTTS / simple workers — expose one voice.
+                voices.add(cloudVoice(CUSTOM_DEFAULT_NAME, "Custom · Default"))
+            } else {
+                for (slot in slots) {
+                    voices.add(cloudVoice("custom-${slot.slug}", "Custom · ${slot.label}"))
+                }
             }
+        }
+        // Put the user's preferred default first so clients that pick voices[0] still get it.
+        val preferred = VoicePreferences.resolvedDefaultVoiceName(context)
+        val preferredIndex = voices.indexOfFirst { it.name == preferred }
+        if (preferredIndex > 0) {
+            val preferredVoice = voices.removeAt(preferredIndex)
+            voices.add(0, preferredVoice)
         }
         return voices
     }
@@ -90,14 +103,17 @@ object CloudVoiceCatalog {
             val baseUrl = CloudTtsPreferences.customBaseUrl(context)
             if (baseUrl.isEmpty()) return null
             val slug = name.removePrefix(CUSTOM_PREFIX)
-            val slot = CloudTtsPreferences.customVoiceSlots(context)
-                .firstOrNull { it.slug == slug } ?: return null
+            val slots = CloudTtsPreferences.customVoiceSlots(context)
+            val slotId = when {
+                slug == CUSTOM_DEFAULT_SLUG && slots.isEmpty() -> ""
+                else -> slots.firstOrNull { it.slug == slug }?.id ?: return null
+            }
             return VoiceTarget.Cloud(
                 CloudVoiceSelection.Custom(
                     baseUrl = baseUrl,
                     apiKey = CloudTtsSecrets.customApiKey(context),
                     model = CloudTtsPreferences.customModel(context),
-                    voiceName = slot.id,
+                    voiceName = slotId,
                     useSimpleBody = CloudTtsPreferences.customUsesSimpleBody(context),
                 )
             )
@@ -135,4 +151,6 @@ object CloudVoiceCatalog {
     private const val ELEVENLABS_PREFIX = "elevenlabs-"
     private const val DEEPGRAM_PREFIX = "deepgram-"
     private const val CUSTOM_PREFIX = "custom-"
+    private const val CUSTOM_DEFAULT_SLUG = "default"
+    const val CUSTOM_DEFAULT_NAME = "custom-default"
 }
