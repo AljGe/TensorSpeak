@@ -14,6 +14,11 @@ sealed class CloudVoiceSelection {
         val voiceId: String,
     ) : CloudVoiceSelection()
 
+    data class Deepgram(
+        val apiKey: String,
+        val voice: DeepgramVoice,
+    ) : CloudVoiceSelection()
+
     data class Custom(
         val baseUrl: String,
         val apiKey: String,

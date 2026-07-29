@@ -15,6 +15,7 @@ object CloudTtsSecrets {
     private const val FILE = "tensorspeak_cloud_secrets"
     private const val KEY_OPENAI = "openai_api_key"
     private const val KEY_ELEVENLABS = "elevenlabs_api_key"
+    private const val KEY_DEEPGRAM = "deepgram_api_key"
     private const val KEY_CUSTOM = "custom_api_key"
     private const val TAG = "CloudTtsSecrets"
 
@@ -36,6 +37,9 @@ object CloudTtsSecrets {
 
     fun elevenLabsApiKey(context: Context): String = get(context, KEY_ELEVENLABS)
     fun setElevenLabsApiKey(context: Context, key: String) = set(context, KEY_ELEVENLABS, key)
+
+    fun deepgramApiKey(context: Context): String = get(context, KEY_DEEPGRAM)
+    fun setDeepgramApiKey(context: Context, key: String) = set(context, KEY_DEEPGRAM, key)
 
     fun customApiKey(context: Context): String = get(context, KEY_CUSTOM)
     fun setCustomApiKey(context: Context, key: String) = set(context, KEY_CUSTOM, key)

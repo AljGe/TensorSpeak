@@ -4,6 +4,7 @@ package com.github.aljge.tensorspeak
 enum class CloudProvider(val id: String, val label: String) {
     OPENAI("openai", "OpenAI"),
     ELEVENLABS("elevenlabs", "ElevenLabs"),
+    DEEPGRAM("deepgram", "Deepgram"),
     CUSTOM("custom", "Custom endpoint");
 
     companion object {

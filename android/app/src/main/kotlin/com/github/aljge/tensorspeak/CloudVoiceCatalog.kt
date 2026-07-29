@@ -28,6 +28,11 @@ object CloudVoiceCatalog {
                 voices.add(cloudVoice("elevenlabs-${slot.slug}"))
             }
         }
+        if (CloudTtsSecrets.deepgramApiKey(context).isNotEmpty()) {
+            for (voice in DeepgramVoice.entries) {
+                voices.add(cloudVoice("deepgram-${voice.id}"))
+            }
+        }
         if (CloudTtsPreferences.customBaseUrl(context).isNotEmpty()) {
             for (slot in CloudTtsPreferences.customVoiceSlots(context)) {
                 voices.add(cloudVoice("custom-${slot.slug}"))
@@ -62,6 +67,13 @@ object CloudVoiceCatalog {
                     slot.id,
                 )
             )
+        }
+
+        if (name.startsWith(DEEPGRAM_PREFIX)) {
+            val apiKey = CloudTtsSecrets.deepgramApiKey(context)
+            if (apiKey.isEmpty()) return null
+            val voice = DeepgramVoice.fromId(name.removePrefix(DEEPGRAM_PREFIX))
+            return VoiceTarget.Cloud(CloudVoiceSelection.Deepgram(apiKey, voice))
         }
 
         if (name.startsWith(CUSTOM_PREFIX)) {
@@ -106,5 +118,6 @@ object CloudVoiceCatalog {
 
     private const val OPENAI_PREFIX = "openai-"
     private const val ELEVENLABS_PREFIX = "elevenlabs-"
+    private const val DEEPGRAM_PREFIX = "deepgram-"
     private const val CUSTOM_PREFIX = "custom-"
 }

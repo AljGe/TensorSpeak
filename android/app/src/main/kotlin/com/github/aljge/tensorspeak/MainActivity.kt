@@ -206,6 +206,7 @@ class MainActivity : ComponentActivity() {
         val openAiKey = findViewById<TextInputEditText>(R.id.openai_api_key)
         val elevenLabsKey = findViewById<TextInputEditText>(R.id.elevenlabs_api_key)
         val elevenLabsSlots = findViewById<TextInputEditText>(R.id.elevenlabs_voice_slots)
+        val deepgramKey = findViewById<TextInputEditText>(R.id.deepgram_api_key)
         val customBaseUrl = findViewById<TextInputEditText>(R.id.custom_base_url)
         val customKey = findViewById<TextInputEditText>(R.id.custom_api_key)
         val customModel = findViewById<TextInputEditText>(R.id.custom_model)
@@ -217,6 +218,7 @@ class MainActivity : ComponentActivity() {
         openAiKey.setText(CloudTtsSecrets.openAiApiKey(this))
         elevenLabsKey.setText(CloudTtsSecrets.elevenLabsApiKey(this))
         elevenLabsSlots.setText(CloudTtsPreferences.elevenLabsVoiceSlotsText(this))
+        deepgramKey.setText(CloudTtsSecrets.deepgramApiKey(this))
         customBaseUrl.setText(CloudTtsPreferences.customBaseUrl(this))
         customKey.setText(CloudTtsSecrets.customApiKey(this))
         customModel.setText(CloudTtsPreferences.customModel(this))
@@ -244,6 +246,7 @@ class MainActivity : ComponentActivity() {
             CloudTtsPreferences.setElevenLabsVoiceSlotsText(
                 this, elevenLabsSlots.text?.toString().orEmpty(),
             )
+            CloudTtsSecrets.setDeepgramApiKey(this, deepgramKey.text?.toString().orEmpty())
             CloudTtsPreferences.setCustomBaseUrl(this, customBaseUrl.text?.toString().orEmpty())
             CloudTtsSecrets.setCustomApiKey(this, customKey.text?.toString().orEmpty())
             CloudTtsPreferences.setCustomModel(this, customModel.text?.toString().orEmpty())

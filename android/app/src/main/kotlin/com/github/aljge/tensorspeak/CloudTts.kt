@@ -77,6 +77,7 @@ class CloudTts {
     private fun maxCharsFor(selection: CloudVoiceSelection): Int = when (selection) {
         is CloudVoiceSelection.OpenAi -> OPENAI_MAX_CHARS
         is CloudVoiceSelection.ElevenLabs -> ELEVENLABS_MAX_CHARS
+        is CloudVoiceSelection.Deepgram -> DEEPGRAM_MAX_CHARS
         is CloudVoiceSelection.Custom -> CUSTOM_MAX_CHARS
     }
 
@@ -90,6 +91,10 @@ class CloudTts {
             AudioBlobDecoder.decode(execute(request, OpenAiTtsRequest::errorMessage))
         }
         is CloudVoiceSelection.ElevenLabs -> fetchElevenLabs(chunk, selection)
+        is CloudVoiceSelection.Deepgram -> {
+            val request = DeepgramTtsRequest.build(chunk, selection)
+            AudioBlobDecoder.decode(execute(request, DeepgramTtsRequest::errorMessage))
+        }
         is CloudVoiceSelection.Custom -> {
             val request = CustomCloudTtsRequest.build(chunk, selection)
             AudioBlobDecoder.decode(execute(request) { it.take(200) })
@@ -146,10 +151,12 @@ class CloudTts {
         val JSON = "application/json".toMediaType()
 
         // OpenAI's `input` field caps at 4096 chars; ElevenLabs' limit is plan-dependent
-        // (commonly 2500-5000) so this stays conservative; the custom endpoint is assumed
-        // OpenAI-compatible unless the user's server says otherwise.
+        // (commonly 2500-5000) so this stays conservative; Deepgram's `/v1/speak` caps at
+        // 2000 bytes of `text`; the custom endpoint is assumed OpenAI-compatible unless the
+        // user's server says otherwise.
         const val OPENAI_MAX_CHARS = 4096
         const val ELEVENLABS_MAX_CHARS = 2000
+        const val DEEPGRAM_MAX_CHARS = 2000
         const val CUSTOM_MAX_CHARS = 4096
     }
 }
