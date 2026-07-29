@@ -1,17 +1,19 @@
 package com.github.aljge.tensorspeak
 
 /**
- * User-facing first-chunk budget. Smaller values lower TTFA; larger values keep more of the
- * opening sentence in one decode (smoother prosody, slower start).
+ * User-facing chunking budgets. Smaller values lower TTFA (and insert more mid-sentence
+ * breaths); larger values keep more of each phrase in one decode (smoother prosody, slower
+ * start). Both limits keep the same smart sentence/punctuation splitter.
  */
 enum class LatencyProfile(
     val id: String,
     val label: String,
     val firstChunkLimit: Int,
+    val chunkLimit: Int,
 ) {
-    FAST("fast", "Experimental · faster start", 64),
-    BALANCED("balanced", "Balanced start (default)", 96),
-    CONTINUOUS("continuous", "Longer first phrase", 280);
+    FAST("fast", "Experimental · faster start", 64, 160),
+    BALANCED("balanced", "Balanced (default)", 96, 280),
+    CONTINUOUS("continuous", "Longer phrases", 280, 560);
 
     companion object {
         val DEFAULT = BALANCED

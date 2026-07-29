@@ -98,13 +98,14 @@ class TensorSpeakTtsService : TextToSpeechService() {
                     if (warmedKey != key) {
                         runBlocking {
                             val variation = ModelPreferences.variation(applicationContext, warmed.variant)
+                            val profile = ModelPreferences.latencyProfile(applicationContext)
                             warmed.synthesizeStreaming(
                                 text = "Warm up.",
                                 speed = 1.0f,
                                 variation = variation,
                                 seed = 1L,
-                                firstChunkLimit = ModelPreferences.latencyProfile(applicationContext)
-                                    .firstChunkLimit,
+                                firstChunkLimit = profile.firstChunkLimit,
+                                chunkLimit = profile.chunkLimit,
                                 shouldContinue = { true },
                             ) { true }
                         }
@@ -189,13 +190,14 @@ class TensorSpeakTtsService : TextToSpeechService() {
 
             var delivered = true
             val variation = ModelPreferences.variation(applicationContext, engine.variant)
-            val firstChunkLimit = ModelPreferences.latencyProfile(applicationContext).firstChunkLimit
+            val profile = ModelPreferences.latencyProfile(applicationContext)
             runBlocking {
                 engine.synthesizeStreaming(
                     text = text,
                     speed = speed,
                     variation = variation,
-                    firstChunkLimit = firstChunkLimit,
+                    firstChunkLimit = profile.firstChunkLimit,
+                    chunkLimit = profile.chunkLimit,
                     shouldContinue = { !stopRequested },
                 ) { audio ->
                     streamPcm(audio, callback).also { delivered = it }
@@ -231,8 +233,8 @@ class TensorSpeakTtsService : TextToSpeechService() {
             // builds to time the utterance out ("synthesis error") while OkHttp is still
             // waiting — especially on cellular. Streaming later chunks still improves TTFA
             // versus buffering the whole reply.
-            val firstChunkLimit = ModelPreferences.latencyProfile(applicationContext)
-                .firstChunkLimit
+            val profile = ModelPreferences.latencyProfile(applicationContext)
+            val firstChunkLimit = profile.firstChunkLimit
                 .coerceAtMost(CloudTts.CLOUD_FIRST_CHUNK_LIMIT)
             runBlocking {
                 cloudTts.synthesizeStreaming(
@@ -241,6 +243,7 @@ class TensorSpeakTtsService : TextToSpeechService() {
                     selection = selection,
                     shouldContinue = { !stopRequested },
                     firstChunkLimit = firstChunkLimit,
+                    chunkLimit = profile.chunkLimit,
                 ) { sampleRate, audio ->
                     if (!started) {
                         callback.start(sampleRate, AudioFormat.ENCODING_PCM_16BIT, 1)

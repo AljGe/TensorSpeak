@@ -55,10 +55,18 @@ class CloudTts(
         selection: CloudVoiceSelection,
         shouldContinue: () -> Boolean = { true },
         firstChunkLimit: Int = CLOUD_FIRST_CHUNK_LIMIT,
+        chunkLimit: Int = Int.MAX_VALUE,
     ): Result {
         val pieces = mutableListOf<FloatArray>()
         var sampleRate = OnnxTts.SAMPLE_RATE
-        synthesizeStreaming(text, speed, selection, shouldContinue, firstChunkLimit) { rate, audio ->
+        synthesizeStreaming(
+            text,
+            speed,
+            selection,
+            shouldContinue,
+            firstChunkLimit,
+            chunkLimit,
+        ) { rate, audio ->
             sampleRate = rate
             pieces.add(audio)
             true
@@ -83,10 +91,13 @@ class CloudTts(
         selection: CloudVoiceSelection,
         shouldContinue: () -> Boolean = { true },
         firstChunkLimit: Int = CLOUD_FIRST_CHUNK_LIMIT,
+        /** Subsequent-chunk budget; capped at the provider max. Defaults to that max. */
+        chunkLimit: Int = Int.MAX_VALUE,
         onChunk: (sampleRate: Int, samples: FloatArray) -> Boolean,
     ): Unit = withContext(Dispatchers.IO) {
         val normalized = TextChunker.collapseWhitespace(text)
-        val limit = maxCharsFor(selection)
+        val providerMax = maxCharsFor(selection)
+        val limit = chunkLimit.coerceIn(1, providerMax)
         val firstLimit = firstChunkLimit.coerceIn(1, limit)
         val chunks = if (normalized.length <= firstLimit) {
             listOf(normalized)

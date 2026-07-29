@@ -99,6 +99,47 @@ class TextChunkerTest {
     }
 
     @Test
+    fun `latency profiles respect both first and subsequent limits`() {
+        val long =
+            "A very long sentence that keeps going and going without stopping, " +
+                "and then continues past any first-chunk limit with another clause, " +
+                "and still more text after that clause so the splitter has to cut again, " +
+                "plus yet another stretch of filler words that push past balanced and continuous " +
+                "subsequent budgets so every profile must emit more than one continuation piece."
+        for (profile in LatencyProfile.entries) {
+            val chunks = TextChunker.split(
+                long,
+                limit = profile.chunkLimit,
+                firstChunkLimit = profile.firstChunkLimit,
+            )
+            assertTrue("${profile.id} should split", chunks.size >= 2)
+            // Punctuation break at the end of the limit+1 search window can yield limit+1.
+            assertTrue(
+                "${profile.id} first chunk ${chunks.first().length} exceeds ${profile.firstChunkLimit}",
+                chunks.first().length <= profile.firstChunkLimit + 1,
+            )
+            assertTrue(
+                "${profile.id} later chunk exceeds ${profile.chunkLimit}",
+                chunks.drop(1).all { it.length <= profile.chunkLimit + 1 },
+            )
+        }
+        val fast = TextChunker.split(
+            long,
+            limit = LatencyProfile.FAST.chunkLimit,
+            firstChunkLimit = LatencyProfile.FAST.firstChunkLimit,
+        )
+        val continuous = TextChunker.split(
+            long,
+            limit = LatencyProfile.CONTINUOUS.chunkLimit,
+            firstChunkLimit = LatencyProfile.CONTINUOUS.firstChunkLimit,
+        )
+        assertTrue(
+            "fast should emit more pieces than continuous",
+            fast.size > continuous.size,
+        )
+    }
+
+    @Test
     fun `does not split common abbreviations into micro sentences`() {
         assertEquals(
             listOf("Bring pens, paper, etc. tomorrow before 9:00."),

@@ -31,7 +31,7 @@
     <string name="model_pack_missing_hint">Install the on-device model pack first</string>
     <string name="default_voice_label">Default voice</string>
     <string name="preview_voice">Preview voice</string>
-    <string name="setup_latency_hint">Tip: under Advanced runtime, \"Experimental · faster start\" lowers time-to-first-audio for on-device speech.</string>
+    <string name="setup_latency_hint">Tip: under Advanced runtime, chunking profiles trade start latency for phrase length (faster start vs longer phrases).</string>
     <string name="engine_settings_title">On-device settings</string>
     <string name="advanced_runtime_title">Advanced runtime</string>
     <string name="system_tts_title">System text-to-speech</string>
@@ -40,7 +40,7 @@
     <string name="model_label">Model</string>
     <string name="quality_label">Quality profile</string>
     <string name="backend_label">Runtime backend</string>
-    <string name="latency_label">Start latency</string>
+    <string name="latency_label">Chunking</string>
     <string name="threads_label">CPU threads</string>
     <string name="experimental_hint">Experimental backends and thread overrides can be faster or slower by device. The app falls back to CPU if a backend fails to load. Changes also apply to system TTS.</string>
     <string name="model_loading">Loading %1$s…</string>

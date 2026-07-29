@@ -82,6 +82,7 @@ class OnnxTts private constructor(
         variation: Float? = null,
         seed: Long = 0L,
         firstChunkLimit: Int = TextChunker.FIRST_CHUNK_LIMIT,
+        chunkLimit: Int = TextChunker.LIMIT,
         shouldContinue: () -> Boolean = { true },
         onChunkTiming: ((StageTimings) -> Unit)? = null,
         onAudio: (FloatArray) -> Boolean,
@@ -96,7 +97,11 @@ class OnnxTts private constructor(
             TextChunker.collapseWhitespace(text)
         }
         val normalizeMs = (System.nanoTime() - normalizeStarted) / 1e6
-        val chunks = TextChunker.split(forChunking, firstChunkLimit = firstChunkLimit)
+        val chunks = TextChunker.split(
+            forChunking,
+            limit = chunkLimit,
+            firstChunkLimit = firstChunkLimit,
+        )
         for ((index, chunk) in chunks.withIndex()) {
             if (!shouldContinue()) return@withContext
             if (index > 0) {

@@ -128,13 +128,13 @@ class MainActivity : ComponentActivity() {
                     var firstAudioMs = -1L
                     var samples = 0
                     val variation = ModelPreferences.variation(this@MainActivity, engine.variant)
-                    val firstChunkLimit = ModelPreferences.latencyProfile(this@MainActivity)
-                        .firstChunkLimit
+                    val profile = ModelPreferences.latencyProfile(this@MainActivity)
                     player.startStreaming()
                     engine.synthesizeStreaming(
                         text = text,
                         variation = variation,
-                        firstChunkLimit = firstChunkLimit,
+                        firstChunkLimit = profile.firstChunkLimit,
+                        chunkLimit = profile.chunkLimit,
                     ) { audio ->
                         if (firstAudioMs < 0L) {
                             firstAudioMs = System.currentTimeMillis() - started
@@ -542,13 +542,13 @@ class MainActivity : ComponentActivity() {
                         }
                         val active = tts ?: error("engine unavailable")
                         val variation = ModelPreferences.variation(this@MainActivity, active.variant)
-                        val firstChunkLimit = ModelPreferences.latencyProfile(this@MainActivity)
-                            .firstChunkLimit
+                        val profile = ModelPreferences.latencyProfile(this@MainActivity)
                         var started = false
                         active.synthesizeStreaming(
                             text = PREVIEW_TEXT,
                             variation = variation,
-                            firstChunkLimit = firstChunkLimit,
+                            firstChunkLimit = profile.firstChunkLimit,
+                            chunkLimit = profile.chunkLimit,
                             shouldContinue = { generation == previewGeneration },
                         ) { audio ->
                             if (generation != previewGeneration) return@synthesizeStreaming false

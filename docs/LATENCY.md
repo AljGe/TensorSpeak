@@ -16,7 +16,12 @@ without audio regressions.
 | Preview `AudioTrack` streaming in `MainActivity` | production |
 | In-app synthesis benchmark (Quick / Compare backends) | production |
 | Experimental · NNAPI / XNNPACK / thread overrides | opt-in in settings UI (falls back to CPU) |
-| First-chunk latency profile (64 / 96 / 280) | opt-in in settings UI |
+| Chunking profiles (first / subsequent): Fast 64/160, Balanced 96/280, Continuous 280/560 | opt-in in settings UI |
+
+Smart sentence/punctuation splitting stays the same; profiles only change the character
+budgets. Smaller first limits lower TTFA; larger subsequent limits keep longer phrases in
+one decode (fewer mid-sentence breaths). Total decode work for the same text is roughly
+unchanged.
 
 ## Benchmark entry points
 
