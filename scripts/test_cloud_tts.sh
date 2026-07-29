@@ -89,29 +89,39 @@ if [[ -z "${CUSTOM_BASE_URL:-}" ]]; then
 else
   BASE="${CUSTOM_BASE_URL%/}"
   # App default: OpenAI-compatible POST {base}/audio/speech
-  CF_OUT="$OUT_DIR/cloudflare-audio-speech.mp3"
+  CF_OUT="$OUT_DIR/cloudflare-audio-speech.wav"
   AUTH_ARGS=()
   if [[ -n "${CUSTOM_API_KEY:-}" ]]; then
     AUTH_ARGS=(-H "Authorization: Bearer ${CUSTOM_API_KEY}")
   fi
-  CF_HTTP="$(
-    curl -sS -o "$CF_OUT" -w '%{http_code}' \
-      -X POST "${BASE}/audio/speech" \
-      -H "Content-Type: application/json" \
-      "${AUTH_ARGS[@]}" \
-      -d "{\"input\":\"${ESCAPED}\",\"response_format\":\"wav\"}"
-  )"
+  CF_HTTP="000"
+  for attempt in 1 2 3 4 5; do
+    CF_HTTP="$(
+      curl -sS -o "$CF_OUT" -w '%{http_code}' \
+        -X POST "${BASE}/audio/speech" \
+        -H "Content-Type: application/json" \
+        "${AUTH_ARGS[@]}" \
+        -d "{\"input\":\"${ESCAPED}\",\"response_format\":\"wav\"}"
+    )"
+    [[ "$CF_HTTP" == "200" ]] && break
+    sleep 2
+  done
   probe_audio "cloudflare /audio/speech" "$CF_OUT" "$CF_HTTP"
 
   # Also hit the root path the worker README documents
-  CF_ROOT_OUT="$OUT_DIR/cloudflare-root.mp3"
-  CF_ROOT_HTTP="$(
-    curl -sS -o "$CF_ROOT_OUT" -w '%{http_code}' \
-      -X POST "${BASE}/" \
-      -H "Content-Type: application/json" \
-      "${AUTH_ARGS[@]}" \
-      -d "{\"input\":\"${ESCAPED}\"}"
-  )"
+  CF_ROOT_OUT="$OUT_DIR/cloudflare-root.wav"
+  CF_ROOT_HTTP="000"
+  for attempt in 1 2 3 4 5; do
+    CF_ROOT_HTTP="$(
+      curl -sS -o "$CF_ROOT_OUT" -w '%{http_code}' \
+        -X POST "${BASE}/" \
+        -H "Content-Type: application/json" \
+        "${AUTH_ARGS[@]}" \
+        -d "{\"input\":\"${ESCAPED}\"}"
+    )"
+    [[ "$CF_ROOT_HTTP" == "200" ]] && break
+    sleep 2
+  done
   probe_audio "cloudflare /" "$CF_ROOT_OUT" "$CF_ROOT_HTTP"
 fi
 

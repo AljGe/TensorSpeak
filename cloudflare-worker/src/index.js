@@ -1,7 +1,7 @@
 // Minimal TTS endpoint backed by Cloudflare Workers AI (@cf/myshell-ai/melotts).
 // Accepts { "input": "..." } or { "text": "..." } (OpenAI /audio/speech-compatible
 // body is also accepted; `voice`/`model`/`response_format` fields are ignored) and
-// returns audio bytes (MP3 from MeloTTS), matching what TensorSpeak's "custom" cloud
+// returns audio bytes (WAV from MeloTTS), matching what TensorSpeak's "custom" cloud
 // provider expects (AudioBlobDecoder accepts wav or mp3).
 
 const MAX_INPUT_CHARS = 4096;
@@ -68,15 +68,30 @@ export default {
 
     try {
       // Workers AI schema uses `prompt` (not `text`) for @cf/myshell-ai/melotts.
-      const result = await env.AI.run("@cf/myshell-ai/melotts", { prompt: text, lang });
+      // The model intermittently returns 3043; a couple of retries usually clear it.
+      let result;
+      let lastErr;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          result = await env.AI.run("@cf/myshell-ai/melotts", { prompt: text, lang });
+          lastErr = null;
+          break;
+        } catch (err) {
+          lastErr = err;
+        }
+      }
+      if (lastErr) throw lastErr;
+
       const bytes = audioBytes(result);
       if (!bytes || bytes.byteLength === 0) {
         return jsonError("empty audio from Workers AI", 500);
       }
+      // MeloTTS currently returns 44.1 kHz PCM WAV (docs still mention mp3).
+      const isWav = bytes.length >= 4 &&
+        bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46;
       return new Response(bytes, {
         headers: {
-          // MeloTTS returns MP3; TensorSpeak's AudioBlobDecoder handles both wav and mp3.
-          "Content-Type": "audio/mpeg",
+          "Content-Type": isWav ? "audio/wav" : "audio/mpeg",
           "Cache-Control": "no-store",
         },
       });

@@ -10,17 +10,13 @@ package com.github.aljge.tensorspeak
  */
 enum class DeepgramVoice(val id: String, val label: String) {
     THALIA("aura-2-thalia-en", "Thalia"),
-    LUNA("aura-2-luna-en", "Luna"),
-    STELLA("aura-2-stella-en", "Stella"),
-    ATHENA("aura-2-athena-en", "Athena"),
-    HERA("aura-2-hera-en", "Hera"),
-    ORION("aura-2-orion-en", "Orion"),
+    ODYSSEUS("aura-2-odysseus-en", "Odysseus"),
+    AMALTHEA("aura-2-amalthea-en", "Amalthea"),
     ARCAS("aura-2-arcas-en", "Arcas"),
-    PERSEUS("aura-2-perseus-en", "Perseus"),
-    ANGUS("aura-2-angus-en", "Angus"),
-    ORPHEUS("aura-2-orpheus-en", "Orpheus"),
-    HELIOS("aura-2-helios-en", "Helios"),
-    ZEUS("aura-2-zeus-en", "Zeus");
+    APOLLO("aura-2-apollo-en", "Apollo"),
+    ANDROMEDA("aura-2-andromeda-en", "Andromeda")
+    LARA("aura-2-lara-de", "Lara")
+    JULIUS("aura-2-julius-de", "Julius")
 
     companion object {
         val DEFAULT = THALIA
