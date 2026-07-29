@@ -80,5 +80,5 @@
     <string name="preview_cloud_voice">Preview selected voice</string>
     <string name="preview_no_voices">Select a voice to preview.</string>
     <string name="preview_failed">Preview failed: %1$s</string>
-    <string name="preview_playing">Playing…</string>
+    <string name="preview_playing">Playing… (cloud voices wait on the network)</string>
 </resources>

@@ -194,12 +194,11 @@ class TensorSpeakTtsService : TextToSpeechService() {
         try {
             var started = false
             var delivered = true
-            // Providers that always return 24 kHz WAV/PCM can open the audio path before the
-            // first HTTP response; custom endpoints wait until the first decode.
-            cloudTts.knownSampleRateHz(selection)?.let { rate ->
-                callback.start(rate, AudioFormat.ENCODING_PCM_16BIT, 1)
-                started = true
-            }
+            // Do not call callback.start() until the first audio bytes exist. Opening the
+            // framework audio path before the HTTP round trip finishes causes many Android
+            // builds to time the utterance out ("synthesis error") while OkHttp is still
+            // waiting — especially on cellular. Streaming later chunks still improves TTFA
+            // versus buffering the whole reply.
             val firstChunkLimit = ModelPreferences.latencyProfile(applicationContext)
                 .firstChunkLimit
                 .coerceAtMost(CloudTts.CLOUD_FIRST_CHUNK_LIMIT)

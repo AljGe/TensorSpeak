@@ -347,17 +347,36 @@ class MainActivity : ComponentActivity() {
                 return@TextToSpeech
             }
             engine.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
-                override fun onStart(utteranceId: String?) = Unit
+                override fun onStart(utteranceId: String?) {
+                    runOnUiThread {
+                        status.text = getString(R.string.preview_playing)
+                    }
+                }
+
                 override fun onDone(utteranceId: String?) {
                     runOnUiThread { status.text = readyLabel() }
                 }
 
                 @Deprecated("required override")
                 override fun onError(utteranceId: String?) {
-                    runOnUiThread { status.text = getString(R.string.preview_failed, "synthesis error") }
+                    runOnUiThread {
+                        status.text = getString(R.string.preview_failed, "synthesis error")
+                    }
+                }
+
+                override fun onError(utteranceId: String?, errorCode: Int) {
+                    runOnUiThread {
+                        status.text = getString(
+                            R.string.preview_failed,
+                            "synthesis error ($errorCode)",
+                        )
+                    }
                 }
             })
-            engine.speak(PREVIEW_TEXT, TextToSpeech.QUEUE_FLUSH, null, "preview")
+            val speakStatus = engine.speak(PREVIEW_TEXT, TextToSpeech.QUEUE_FLUSH, null, "preview")
+            if (speakStatus != TextToSpeech.SUCCESS) {
+                status.text = getString(R.string.preview_failed, "speak() returned $speakStatus")
+            }
         }, packageName)
     }
 

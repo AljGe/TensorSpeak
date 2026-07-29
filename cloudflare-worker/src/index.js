@@ -68,16 +68,20 @@ export default {
 
     try {
       // Workers AI schema uses `prompt` (not `text`) for @cf/myshell-ai/melotts.
-      // The model intermittently returns 3043; a couple of retries usually clear it.
+      // The model intermittently returns 3043; retry with backoff — five attempts usually clear it.
       let result;
       let lastErr;
-      for (let attempt = 0; attempt < 3; attempt++) {
+      for (let attempt = 0; attempt < 5; attempt++) {
         try {
           result = await env.AI.run("@cf/myshell-ai/melotts", { prompt: text, lang });
           lastErr = null;
           break;
         } catch (err) {
           lastErr = err;
+          const msg = String(err && err.message ? err.message : err);
+          const transient = msg.includes("3043") || msg.includes("Internal server error");
+          if (!transient || attempt === 4) break;
+          await new Promise((r) => setTimeout(r, 250 * (attempt + 1)));
         }
       }
       if (lastErr) throw lastErr;
