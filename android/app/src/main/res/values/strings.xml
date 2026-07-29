@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">TensorSpeak</string>
-    <string name="app_subtitle">On-device text-to-speech · no network</string>
+    <string name="app_subtitle">On-device TTS · optional cloud voices</string>
     <string name="loading">Loading ONNX graphs…</string>
     <string name="ready">Ready (%1$s).</string>
     <string name="speak">Speak</string>
@@ -11,7 +11,18 @@
     <string name="synthesis_failed">Synthesis failed: %1$s</string>
     <string name="tts_engine_label">TensorSpeak</string>
     <string name="try_it_title">Try it</string>
-    <string name="engine_settings_title">Engine settings</string>
+    <string name="setup_title">Setup</string>
+    <string name="setup_step1_title">1. Enable TensorSpeak</string>
+    <string name="setup_step1_body">Choose TensorSpeak as your preferred engine in system text-to-speech settings so other apps can use it.</string>
+    <string name="setup_engine_status_unknown">Open settings, then select TensorSpeak as the preferred engine.</string>
+    <string name="setup_engine_status_preferred">TensorSpeak is the preferred system engine.</string>
+    <string name="setup_engine_status_other">Another engine is preferred. Open settings to switch to TensorSpeak.</string>
+    <string name="setup_step2_title">2. Default voice</string>
+    <string name="setup_step2_body">Used when apps do not pick a voice themselves. On-device voices work offline; cloud voices need a saved API key below.</string>
+    <string name="default_voice_label">Default voice</string>
+    <string name="preview_voice">Preview voice</string>
+    <string name="setup_latency_hint">Tip: under Advanced runtime, \"Experimental · faster start\" lowers time-to-first-audio for on-device speech.</string>
+    <string name="engine_settings_title">On-device settings</string>
     <string name="advanced_runtime_title">Advanced runtime</string>
     <string name="system_tts_title">System text-to-speech</string>
     <string name="system_tts_body">Enable TensorSpeak under your device\'s text-to-speech settings so other apps can use this voice.</string>
@@ -49,12 +60,12 @@
     <string name="benchmark_advanced_title">Full suite (developers)</string>
     <string name="benchmark_adb_hint">For the complete variant × provider matrix and CPU threading sweep, run the instrumented benchmark via adb. Results also appear in logcat with tag SynthBench.</string>
     <string name="benchmark_adb_command">adb shell am instrument -w -e class com.github.aljge.tensorspeak.SynthesisBenchmark#benchmarkVariantsAndProviders com.github.aljge.tensorspeak.test/androidx.test.runner.AndroidJUnitRunner</string>
-    <string name="cloud_voices_title">Cloud voices</string>
-    <string name="cloud_voices_body">Optional. Add an API key to expose a commercial provider as extra system voices — synthesis then leaves the device over the network for those voices only.</string>
+    <string name="cloud_voices_title">3. Optional cloud voices</string>
+    <string name="cloud_voices_body">Add an API key to expose commercial voices in the default-voice list and to other apps. On-device synthesis stays local; only selected cloud voices use the network.</string>
     <string name="openai_title">OpenAI</string>
     <string name="elevenlabs_title">ElevenLabs</string>
     <string name="deepgram_title">Deepgram</string>
-    <string name="deepgram_body">Every Aura-2 voice becomes a selectable system voice once a key is saved — there\'s no separate model/voice picker to fill in.</string>
+    <string name="deepgram_body">Every Aura-2 English voice becomes a selectable system voice once a key is saved — there\'s no separate model/voice picker to fill in.</string>
     <string name="custom_title">Custom endpoint</string>
     <string name="api_key_hint">API key</string>
     <string name="api_key_optional_hint">API key (optional)</string>
@@ -62,10 +73,12 @@
     <string name="voice_slots_helper">label|voice id, e.g. Rachel|21m00Tcm4TlvDq8ikWAM</string>
     <string name="custom_base_url_hint">Base URL</string>
     <string name="custom_model_hint">Model (optional)</string>
+    <string name="custom_simple_body">Simple body ({\"input\": text})</string>
+    <string name="custom_simple_body_helper">Use for the bundled Cloudflare Workers AI endpoint. Leave off for OpenAI-compatible /audio/speech APIs.</string>
     <string name="save_cloud_settings">Save cloud settings</string>
-    <string name="cloud_status_saved">Saved · %1$d cloud voice(s) available</string>
+    <string name="cloud_status_saved">Saved · %1$d cloud voice(s) available · pick Default voice above or reopen system TTS</string>
     <string name="preview_cloud_voice">Preview selected voice</string>
-    <string name="preview_no_voices">Add and save an API key to preview a cloud voice.</string>
+    <string name="preview_no_voices">Select a voice to preview.</string>
     <string name="preview_failed">Preview failed: %1$s</string>
     <string name="preview_playing">Playing…</string>
 </resources>

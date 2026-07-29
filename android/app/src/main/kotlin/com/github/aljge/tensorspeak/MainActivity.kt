@@ -5,9 +5,11 @@ import android.os.Bundle
 import android.provider.Settings
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
+import android.speech.tts.Voice
 import android.view.View
 import android.widget.AdapterView
 import android.widget.ArrayAdapter
+import android.widget.CheckBox
 import android.widget.Spinner
 import android.widget.TextView
 import androidx.activity.ComponentActivity
@@ -32,6 +34,7 @@ class MainActivity : ComponentActivity() {
     private var loadingModel = false
     private var spinnerReady = false
     private var previewTts: TextToSpeech? = null
+    private var defaultVoiceEntries: List<Voice> = emptyList()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -45,17 +48,6 @@ class MainActivity : ComponentActivity() {
         val metrics = findViewById<ChipGroup>(R.id.metrics)
         speak.isEnabled = false
         input.setText(DEMO_TEXT)
-
-        bindEnumSpinner(
-            findViewById(R.id.model),
-            ModelVariant.entries,
-            { it.label },
-            ModelPreferences.get(this),
-        ) { selected ->
-            if (tts?.variant == selected) return@bindEnumSpinner
-            ModelPreferences.set(this, selected)
-            reloadEngine(status, speak)
-        }
 
         bindEnumSpinner(
             findViewById(R.id.quality),
@@ -106,7 +98,9 @@ class MainActivity : ComponentActivity() {
             reloadEngine(status, speak)
         }
 
-        setUpCloudVoicesSection()
+        setUpDefaultVoiceSpinner(status, speak)
+        setUpCloudVoicesSection(status)
+        refreshEngineStatus()
 
         reloadEngine(status, speak) {
             spinnerReady = true
@@ -167,6 +161,11 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        refreshEngineStatus()
+    }
+
     private fun showMetrics(group: ChipGroup, audioSeconds: Float, totalMs: Long, ttfaMs: Long) {
         group.removeAllViews()
         group.addView(makeMetricChip(getString(R.string.metric_audio, audioSeconds)))
@@ -202,7 +201,71 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun setUpCloudVoicesSection() {
+    private fun refreshEngineStatus() {
+        val statusView = findViewById<TextView>(R.id.engine_status)
+        val preferred = Settings.Secure.getString(contentResolver, "tts_default_synth")
+        statusView.text = when {
+            preferred.isNullOrEmpty() -> getString(R.string.setup_engine_status_unknown)
+            preferred == packageName -> getString(R.string.setup_engine_status_preferred)
+            else -> getString(R.string.setup_engine_status_other)
+        }
+    }
+
+    private fun setUpDefaultVoiceSpinner(status: TextView, speak: MaterialButton) {
+        val spinner = findViewById<Spinner>(R.id.default_voice)
+        refreshDefaultVoiceSpinner(spinner)
+        spinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(
+                parent: AdapterView<*>?,
+                view: View?,
+                position: Int,
+                id: Long,
+            ) {
+                if (!spinnerReady || loadingModel) return
+                val voice = defaultVoiceEntries.getOrNull(position) ?: return
+                val previous = VoicePreferences.resolvedDefaultVoiceName(this@MainActivity)
+                if (voice.name == previous) return
+                VoicePreferences.setDefaultVoice(this@MainActivity, voice.name)
+                val target = CloudVoiceCatalog.resolve(this@MainActivity, voice.name)
+                if (target is VoiceTarget.OnDevice && tts?.variant != target.variant) {
+                    reloadEngine(status, speak)
+                } else {
+                    status.text = readyLabel()
+                }
+            }
+
+            override fun onNothingSelected(parent: AdapterView<*>?) = Unit
+        }
+
+        findViewById<MaterialButton>(R.id.preview_play).setOnClickListener {
+            val cloudStatus = findViewById<TextView>(R.id.cloud_status)
+            val position = spinner.selectedItemPosition
+            val voice = defaultVoiceEntries.getOrNull(position)
+            if (voice == null) {
+                cloudStatus.text = getString(R.string.preview_no_voices)
+                return@setOnClickListener
+            }
+            playPreview(voice.name, cloudStatus)
+        }
+    }
+
+    /** @return how many cloud voices are configured (excludes on-device). */
+    private fun refreshDefaultVoiceSpinner(spinner: Spinner): Int {
+        val voices = CloudVoiceCatalog.voices(this)
+        defaultVoiceEntries = voices
+        val labels = voices.map { CloudVoiceCatalog.displayLabel(it) }
+        spinner.adapter = ArrayAdapter(
+            this,
+            android.R.layout.simple_spinner_dropdown_item,
+            labels,
+        )
+        val current = VoicePreferences.resolvedDefaultVoiceName(this)
+        val index = voices.indexOfFirst { it.name == current }.coerceAtLeast(0)
+        spinner.setSelection(index)
+        return voices.count { ModelVariant.entries.none { variant -> variant.id == it.name } }
+    }
+
+    private fun setUpCloudVoicesSection(status: TextView) {
         val openAiKey = findViewById<TextInputEditText>(R.id.openai_api_key)
         val elevenLabsKey = findViewById<TextInputEditText>(R.id.elevenlabs_api_key)
         val elevenLabsSlots = findViewById<TextInputEditText>(R.id.elevenlabs_voice_slots)
@@ -211,9 +274,9 @@ class MainActivity : ComponentActivity() {
         val customKey = findViewById<TextInputEditText>(R.id.custom_api_key)
         val customModel = findViewById<TextInputEditText>(R.id.custom_model)
         val customSlots = findViewById<TextInputEditText>(R.id.custom_voice_slots)
+        val customSimpleBody = findViewById<CheckBox>(R.id.custom_simple_body)
         val cloudStatus = findViewById<TextView>(R.id.cloud_status)
-        val previewSpinner = findViewById<Spinner>(R.id.preview_voice)
-        val previewButton = findViewById<MaterialButton>(R.id.preview_play)
+        val defaultVoiceSpinner = findViewById<Spinner>(R.id.default_voice)
 
         openAiKey.setText(CloudTtsSecrets.openAiApiKey(this))
         elevenLabsKey.setText(CloudTtsSecrets.elevenLabsApiKey(this))
@@ -223,6 +286,7 @@ class MainActivity : ComponentActivity() {
         customKey.setText(CloudTtsSecrets.customApiKey(this))
         customModel.setText(CloudTtsPreferences.customModel(this))
         customSlots.setText(CloudTtsPreferences.customVoiceSlotsText(this))
+        customSimpleBody.isChecked = CloudTtsPreferences.customUsesSimpleBody(this)
 
         bindEnumSpinner(
             findViewById(R.id.openai_model),
@@ -238,8 +302,6 @@ class MainActivity : ComponentActivity() {
             CloudTtsPreferences.elevenLabsModel(this),
         ) { CloudTtsPreferences.setElevenLabsModel(this, it) }
 
-        refreshPreviewVoices(previewSpinner)
-
         findViewById<MaterialButton>(R.id.save_cloud_settings).setOnClickListener {
             CloudTtsSecrets.setOpenAiApiKey(this, openAiKey.text?.toString().orEmpty())
             CloudTtsSecrets.setElevenLabsApiKey(this, elevenLabsKey.text?.toString().orEmpty())
@@ -251,39 +313,24 @@ class MainActivity : ComponentActivity() {
             CloudTtsSecrets.setCustomApiKey(this, customKey.text?.toString().orEmpty())
             CloudTtsPreferences.setCustomModel(this, customModel.text?.toString().orEmpty())
             CloudTtsPreferences.setCustomVoiceSlotsText(this, customSlots.text?.toString().orEmpty())
+            CloudTtsPreferences.setCustomUsesSimpleBody(this, customSimpleBody.isChecked)
 
-            val voiceCount = refreshPreviewVoices(previewSpinner)
+            // Drop a stale default if its provider key / slot disappeared.
+            VoicePreferences.resolvedDefaultVoiceName(this)
+
+            val voiceCount = refreshDefaultVoiceSpinner(defaultVoiceSpinner)
             cloudStatus.text = getString(R.string.cloud_status_saved, voiceCount)
-        }
+            status.text = readyLabel()
 
-        previewButton.setOnClickListener {
-            val voiceName = previewSpinner.selectedItem as? String
-            if (voiceName == null) {
-                cloudStatus.text = getString(R.string.preview_no_voices)
-                return@setOnClickListener
-            }
-            playPreview(voiceName, cloudStatus)
+            sendBroadcast(Intent(TextToSpeech.Engine.ACTION_TTS_DATA_INSTALLED))
         }
-    }
-
-    /** @return how many cloud voices are now configured. */
-    private fun refreshPreviewVoices(spinner: Spinner): Int {
-        val cloudVoiceNames = CloudVoiceCatalog.voices(this)
-            .map { it.name }
-            .filter { name -> ModelVariant.entries.none { it.id == name } }
-        spinner.adapter = ArrayAdapter(
-            this,
-            android.R.layout.simple_spinner_dropdown_item,
-            cloudVoiceNames,
-        )
-        return cloudVoiceNames.size
     }
 
     /**
      * Speaks through this app's own registered `TextToSpeechService`, exercising the exact
      * `onLoadVoice`/`onSynthesizeText` path a real reader app would use — the practical way to
-     * verify a cloud voice end-to-end, since stock Settings > Accessibility > TTS has no
-     * per-voice picker.
+     * verify a voice end-to-end, since stock Settings > Accessibility > TTS often has no
+     * useful per-voice picker.
      */
     private fun playPreview(voiceName: String, status: TextView) {
         previewTts?.shutdown()
@@ -382,13 +429,19 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun readyLabel(): String =
-        getString(
+    private fun readyLabel(): String {
+        val defaultName = VoicePreferences.resolvedDefaultVoiceName(this)
+        val voiceLabel = CloudVoiceCatalog.voices(this)
+            .firstOrNull { it.name == defaultName }
+            ?.let { CloudVoiceCatalog.displayLabel(it) }
+            ?: ModelPreferences.get(this).label
+        return getString(
             R.string.ready_detail,
-            ModelPreferences.get(this).label,
+            voiceLabel,
             ModelPreferences.executionBackend(this).label,
             ModelPreferences.latencyProfile(this).label,
         )
+    }
 
     override fun onDestroy() {
         player.close()
@@ -401,6 +454,6 @@ class MainActivity : ComponentActivity() {
 
     private companion object {
         const val DEMO_TEXT = "A small voice can still have something meaningful to say."
-        const val PREVIEW_TEXT = "This is a preview of the selected cloud voice."
+        const val PREVIEW_TEXT = "This is a preview of the selected voice."
     }
 }

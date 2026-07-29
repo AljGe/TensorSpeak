@@ -18,9 +18,9 @@ import kotlinx.coroutines.runBlocking
  * than a scope of its own.
  *
  * Voices are either the on-device Micro/Nano models or a commercial cloud provider (OpenAI /
- * ElevenLabs / a custom endpoint) — see [CloudVoiceCatalog]. [onLoadVoice] resolves the chosen
- * voice into [loadedTarget]; when a caller never calls `setVoice()`, [loadedTarget] stays null
- * and synthesis falls back to the on-device model chosen in the app's settings screen.
+ * ElevenLabs / Deepgram / a custom endpoint) — see [CloudVoiceCatalog]. [onLoadVoice] resolves
+ * the chosen voice into [loadedTarget]; when a caller never calls `setVoice()`, synthesis uses
+ * [VoicePreferences.resolvedDefaultVoiceName] (local or cloud).
  */
 class TensorSpeakTtsService : TextToSpeechService() {
 
@@ -64,7 +64,7 @@ class TensorSpeakTtsService : TextToSpeechService() {
 
     override fun onGetDefaultVoiceNameFor(lang: String?, country: String?, variant: String?): String? =
         if (onIsLanguageAvailable(lang, country, variant) != TextToSpeech.LANG_NOT_SUPPORTED) {
-            ModelPreferences.get(applicationContext).id
+            VoicePreferences.resolvedDefaultVoiceName(applicationContext)
         } else {
             null
         }
@@ -130,9 +130,18 @@ class TensorSpeakTtsService : TextToSpeechService() {
         // API accepts a speed multiplier directly, ElevenLabs/custom endpoints ignore it.
         val speed = (request.speechRate / 100.0f).coerceIn(MIN_SPEED, MAX_SPEED)
 
-        when (val target = loadedTarget) {
+        // Prefer an explicitly loaded voice; otherwise honor the app's default (which may be
+        // a cloud voice once an API key is configured).
+        val target = loadedTarget
+            ?: CloudVoiceCatalog.resolve(
+                applicationContext,
+                VoicePreferences.resolvedDefaultVoiceName(applicationContext),
+            )
+
+        when (target) {
             is VoiceTarget.Cloud -> synthesizeCloud(text, speed, target.selection, callback)
-            else -> synthesizeOnDevice(text, speed, (target as? VoiceTarget.OnDevice)?.variant, callback)
+            is VoiceTarget.OnDevice -> synthesizeOnDevice(text, speed, target.variant, callback)
+            null -> synthesizeOnDevice(text, speed, null, callback)
         }
     }
 
@@ -183,17 +192,42 @@ class TensorSpeakTtsService : TextToSpeechService() {
         callback: SynthesisCallback,
     ) {
         try {
-            val result = runBlocking {
-                cloudTts.synthesize(text, speed, selection, shouldContinue = { !stopRequested })
+            var started = false
+            var delivered = true
+            // Providers that always return 24 kHz WAV/PCM can open the audio path before the
+            // first HTTP response; custom endpoints wait until the first decode.
+            cloudTts.knownSampleRateHz(selection)?.let { rate ->
+                callback.start(rate, AudioFormat.ENCODING_PCM_16BIT, 1)
+                started = true
             }
-            // Sample rate is only known once the response is decoded, so start() waits for it
-            // (unlike the on-device path, which knows SAMPLE_RATE statically up front).
-            callback.start(result.sampleRate, AudioFormat.ENCODING_PCM_16BIT, 1)
-            if (streamPcm(result.samples, callback)) {
+            val firstChunkLimit = ModelPreferences.latencyProfile(applicationContext)
+                .firstChunkLimit
+                .coerceAtMost(CloudTts.CLOUD_FIRST_CHUNK_LIMIT)
+            runBlocking {
+                cloudTts.synthesizeStreaming(
+                    text = text,
+                    speed = speed,
+                    selection = selection,
+                    shouldContinue = { !stopRequested },
+                    firstChunkLimit = firstChunkLimit,
+                ) { sampleRate, audio ->
+                    if (!started) {
+                        callback.start(sampleRate, AudioFormat.ENCODING_PCM_16BIT, 1)
+                        started = true
+                    }
+                    streamPcm(audio, callback).also { delivered = it }
+                }
+            }
+            if (!started) {
+                callback.start(OnnxTts.SAMPLE_RATE, AudioFormat.ENCODING_PCM_16BIT, 1)
                 callback.done()
-            } else {
-                callback.error()
+                return
             }
+            if (!delivered) {
+                callback.error()
+                return
+            }
+            callback.done()
         } catch (error: Exception) {
             Log.e(TAG, "cloud synthesis failed for: $text", error)
             callback.error()

@@ -9,9 +9,13 @@ import java.util.Locale
  * either the on-device engine or a cloud provider. A cloud provider only appears once it has
  * an API key (custom: a base URL) saved, so an unconfigured provider is simply absent rather
  * than present-but-broken.
+ *
+ * [Voice.name] stays a stable resolve id (`micro`, `openai-nova`, `deepgram-aura-2-thalia-en`).
+ * A human-readable label lives in the features set as `label=…` for in-app pickers.
  */
 object CloudVoiceCatalog {
     private val LOCALE = Locale.US
+    const val FEATURE_LABEL_PREFIX = "label="
 
     fun voices(context: Context): List<Voice> {
         val voices = mutableListOf<Voice>()
@@ -20,26 +24,32 @@ object CloudVoiceCatalog {
         }
         if (CloudTtsSecrets.openAiApiKey(context).isNotEmpty()) {
             for (voice in OpenAiVoice.entries) {
-                voices.add(cloudVoice("openai-${voice.id}"))
+                voices.add(cloudVoice("openai-${voice.id}", "OpenAI · ${voice.label}"))
             }
         }
         if (CloudTtsSecrets.elevenLabsApiKey(context).isNotEmpty()) {
             for (slot in CloudTtsPreferences.elevenLabsVoiceSlots(context)) {
-                voices.add(cloudVoice("elevenlabs-${slot.slug}"))
+                voices.add(cloudVoice("elevenlabs-${slot.slug}", "ElevenLabs · ${slot.label}"))
             }
         }
         if (CloudTtsSecrets.deepgramApiKey(context).isNotEmpty()) {
             for (voice in DeepgramVoice.entries) {
-                voices.add(cloudVoice("deepgram-${voice.id}"))
+                voices.add(cloudVoice("deepgram-${voice.id}", "Deepgram · ${voice.label}"))
             }
         }
         if (CloudTtsPreferences.customBaseUrl(context).isNotEmpty()) {
             for (slot in CloudTtsPreferences.customVoiceSlots(context)) {
-                voices.add(cloudVoice("custom-${slot.slug}"))
+                voices.add(cloudVoice("custom-${slot.slug}", "Custom · ${slot.label}"))
             }
         }
         return voices
     }
+
+    fun displayLabel(voice: Voice): String =
+        voice.features
+            ?.firstOrNull { it.startsWith(FEATURE_LABEL_PREFIX) }
+            ?.removePrefix(FEATURE_LABEL_PREFIX)
+            ?: voice.name
 
     fun resolve(context: Context, name: String?): VoiceTarget? {
         if (name.isNullOrEmpty()) return null
@@ -103,18 +113,23 @@ object CloudVoiceCatalog {
             Voice.QUALITY_HIGH,
             Voice.LATENCY_LOW,
             /* requiresNetworkConnection = */ false,
-            emptySet(),
+            setOf("$FEATURE_LABEL_PREFIX${onDeviceLabel(variant)}"),
         )
 
-    private fun cloudVoice(name: String): Voice =
+    private fun cloudVoice(name: String, label: String): Voice =
         Voice(
             name,
             LOCALE,
             Voice.QUALITY_VERY_HIGH,
             Voice.LATENCY_NORMAL,
             /* requiresNetworkConnection = */ true,
-            emptySet(),
+            setOf("$FEATURE_LABEL_PREFIX$label"),
         )
+
+    private fun onDeviceLabel(variant: ModelVariant): String = when (variant) {
+        ModelVariant.MICRO -> "On-device · Micro"
+        ModelVariant.NANO -> "On-device · Nano"
+    }
 
     private const val OPENAI_PREFIX = "openai-"
     private const val ELEVENLABS_PREFIX = "elevenlabs-"
