@@ -10,6 +10,9 @@ ARM64_SRC="$APK_DIR/app-arm64-v8a-release.apk"
 X86_SRC="$APK_DIR/app-x86_64-release.apk"
 ARM64_OUT="TensorSpeak-${VERSION}-arm64-v8a.apk"
 X86_OUT="TensorSpeak-${VERSION}-x86_64.apk"
+PACK_DIR="$ROOT/out/model-packs"
+MICRO_ZIP="$PACK_DIR/TensorSpeak-model-micro.zip"
+NANO_ZIP="$PACK_DIR/TensorSpeak-model-nano.zip"
 
 if [[ -f "$ROOT/.signing.env" ]]; then
   set -a
@@ -19,7 +22,9 @@ if [[ -f "$ROOT/.signing.env" ]]; then
 fi
 
 uv run python scripts/fetch_model.py
-uv run python scripts/export_android_assets.py --espeak-data
+# Slim APK: omit ONNX graphs from assets; ship them as separate release ZIPs.
+uv run python scripts/export_android_assets.py --skip-models --espeak-data
+uv run python scripts/pack_model_assets.py --out "$PACK_DIR"
 
 (
   cd android
@@ -34,14 +39,23 @@ if [[ ! -f "$ARM64_SRC" || ! -f "$X86_SRC" ]]; then
   exit 1
 fi
 
+if [[ ! -f "$MICRO_ZIP" || ! -f "$NANO_ZIP" ]]; then
+  echo "Expected model packs:" >&2
+  echo "  $MICRO_ZIP" >&2
+  echo "  $NANO_ZIP" >&2
+  exit 1
+fi
+
 cp "$ARM64_SRC" "$APK_DIR/$ARM64_OUT"
 cp "$X86_SRC" "$APK_DIR/$X86_OUT"
-ls -lh "$APK_DIR/$ARM64_OUT" "$APK_DIR/$X86_OUT"
+ls -lh "$APK_DIR/$ARM64_OUT" "$APK_DIR/$X86_OUT" "$MICRO_ZIP" "$NANO_ZIP"
 
 if [[ "${1:-}" == "--upload" ]]; then
   gh release upload "v${VERSION}" \
     "$APK_DIR/$ARM64_OUT" \
     "$APK_DIR/$X86_OUT" \
+    "$MICRO_ZIP" \
+    "$NANO_ZIP" \
     --repo AljGe/TensorSpeak \
     --clobber
   # Drop legacy / unsigned leftovers so Obtainium does not pick the wrong asset.
@@ -56,11 +70,13 @@ if [[ "${1:-}" == "--upload" ]]; then
   NOTES="$(cat <<EOF
 Signed per-ABI APKs for TensorSpeak ${VERSION}.
 
-Includes both model variants in-app:
-- Inflect Micro v2 ONNX (default)
-- Inflect Nano v2 ONNX
+ONNX graphs are **not** bundled in the APK. Download once from this release (or from the
+in-app On-device models section) before using Micro / Nano:
 
-Download:
+- \`TensorSpeak-model-micro.zip\` — Inflect Micro v2 (~38 MB)
+- \`TensorSpeak-model-nano.zip\` — Inflect Nano v2 (~16 MB)
+
+APKs:
 - \`${ARM64_OUT}\` — phones (arm64-v8a); Obtainium APK filter \`arm64\`
 - \`${X86_OUT}\` — x86_64 emulators / Chromebooks
 

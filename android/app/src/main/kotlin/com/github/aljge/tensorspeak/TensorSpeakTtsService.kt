@@ -111,7 +111,15 @@ class TensorSpeakTtsService : TextToSpeechService() {
                         warmedKey = key
                     }
                 }
-                    .onFailure { Log.e(TAG, "failed to load the engine", it) }
+                    .onFailure { error ->
+                        if (error is ModelPackMissingException ||
+                            error.cause is ModelPackMissingException
+                        ) {
+                            Log.i(TAG, "skipping warm-up; model pack not installed yet")
+                        } else {
+                            Log.e(TAG, "failed to load the engine", error)
+                        }
+                    }
             }
         }
         return availability
@@ -200,6 +208,9 @@ class TensorSpeakTtsService : TextToSpeechService() {
                 return
             }
             callback.done()
+        } catch (error: ModelPackMissingException) {
+            Log.w(TAG, "on-device synthesis needs model pack for ${error.variant.id}", error)
+            callback.error()
         } catch (error: Exception) {
             Log.e(TAG, "synthesis failed for: $text", error)
             callback.error()
@@ -293,6 +304,8 @@ class TensorSpeakTtsService : TextToSpeechService() {
         }
         val created = try {
             EngineRepository.acquireBlocking(applicationContext, preferred, config)
+        } catch (error: ModelPackMissingException) {
+            throw error
         } catch (error: Exception) {
             if (config.provider == OnnxTts.Provider.CPU) throw error
             Log.w(TAG, "${config.provider} unavailable, falling back to CPU", error)

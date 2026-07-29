@@ -18,9 +18,10 @@ object CloudVoiceCatalog {
     const val FEATURE_LABEL_PREFIX = "label="
 
     fun voices(context: Context): List<Voice> {
+        val packs = ModelPackManager(context)
         val voices = mutableListOf<Voice>()
         for (variant in ModelVariant.entries) {
-            voices.add(onDeviceVoice(variant))
+            voices.add(onDeviceVoice(variant, packs))
         }
         if (CloudTtsSecrets.openAiApiKey(context).isNotEmpty()) {
             for (voice in OpenAiVoice.entries) {
@@ -122,15 +123,18 @@ object CloudVoiceCatalog {
         return null
     }
 
-    private fun onDeviceVoice(variant: ModelVariant): Voice =
-        Voice(
+    private fun onDeviceVoice(variant: ModelVariant, packs: ModelPackManager): Voice {
+        val ready = packs.isInstalled(variant) || packs.hasAssetGraphs(variant)
+        val label = onDeviceLabel(variant, ready)
+        return Voice(
             variant.id,
             LOCALE,
             Voice.QUALITY_HIGH,
             Voice.LATENCY_LOW,
-            /* requiresNetworkConnection = */ false,
-            setOf("$FEATURE_LABEL_PREFIX${onDeviceLabel(variant)}"),
+            /* requiresNetworkConnection = */ !ready,
+            setOf("$FEATURE_LABEL_PREFIX$label"),
         )
+    }
 
     private fun cloudVoice(name: String, label: String): Voice =
         Voice(
@@ -142,9 +146,12 @@ object CloudVoiceCatalog {
             setOf("$FEATURE_LABEL_PREFIX$label"),
         )
 
-    private fun onDeviceLabel(variant: ModelVariant): String = when (variant) {
-        ModelVariant.MICRO -> "On-device · Micro"
-        ModelVariant.NANO -> "On-device · Nano"
+    private fun onDeviceLabel(variant: ModelVariant, ready: Boolean): String {
+        val base = when (variant) {
+            ModelVariant.MICRO -> "On-device · Micro"
+            ModelVariant.NANO -> "On-device · Nano"
+        }
+        return if (ready) base else "$base (download required)"
     }
 
     private const val OPENAI_PREFIX = "openai-"

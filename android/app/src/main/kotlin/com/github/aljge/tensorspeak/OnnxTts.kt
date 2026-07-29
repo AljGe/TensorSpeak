@@ -401,10 +401,15 @@ class OnnxTts private constructor(
         }
 
         /**
-         * Reads both graphs for [variant] and the shared symbol table out of assets.
-         * The graphs are stored uncompressed (see `noCompress += "onnx"`), so this is a
-         * straight read. Optional [graphDirectory] loads pre-optimized / ORT-format files
-         * from an absolute directory instead of assets (experimental track).
+         * Loads both graphs for [variant] and the shared symbol table.
+         *
+         * Resolution order when [graphDirectory] is null:
+         * 1. Installed GitHub model pack under `filesDir/models/<variant>/`
+         * 2. APK assets (dev/debug fallback when graphs were exported locally)
+         * 3. [ModelPackMissingException]
+         *
+         * Optional [graphDirectory] loads pre-optimized / ORT-format files from an absolute
+         * directory instead (benchmark / experimental track).
          */
         suspend fun fromAssets(
             context: Context,
@@ -417,6 +422,12 @@ class OnnxTts private constructor(
         ): OnnxTts = withContext(Dispatchers.IO) {
             val assets = context.assets
             val env = environmentFor(config)
+
+            val packManager = ModelPackManager(context)
+            val resolvedDirectory = graphDirectory ?: packManager.installedDirectory(variant)
+            if (resolvedDirectory == null && !packManager.hasAssetGraphs(variant)) {
+                throw ModelPackMissingException(variant)
+            }
 
             val prefix = variant.id
             val profileDir = if (config.enableProfiling) {
@@ -431,13 +442,13 @@ class OnnxTts private constructor(
                 }
                 val options = sessionOptions(config, profilePath)
                 try {
-                    if (graphDirectory != null) {
-                        val onnx = File(graphDirectory, name)
-                        val ort = File(graphDirectory, name.removeSuffix(".onnx") + ".ort")
+                    if (resolvedDirectory != null) {
+                        val onnx = File(resolvedDirectory, name)
+                        val ort = File(resolvedDirectory, name.removeSuffix(".onnx") + ".ort")
                         val path = when {
                             ort.exists() -> ort.absolutePath
                             onnx.exists() -> onnx.absolutePath
-                            else -> error("missing $name under $graphDirectory")
+                            else -> error("missing $name under $resolvedDirectory")
                         }
                         return env.createSession(path, options)
                     }

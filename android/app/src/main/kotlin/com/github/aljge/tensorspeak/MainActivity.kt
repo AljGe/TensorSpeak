@@ -9,6 +9,7 @@ import android.view.View
 import android.widget.AdapterView
 import android.widget.ArrayAdapter
 import android.widget.CheckBox
+import android.widget.ProgressBar
 import android.widget.Spinner
 import android.widget.TextView
 import androidx.activity.ComponentActivity
@@ -34,13 +35,16 @@ class MainActivity : ComponentActivity() {
     private val cloudPreview = CloudTts()
     private var tts: OnnxTts? = null
     private var loadingModel = false
+    private var installingPack: ModelVariant? = null
     private var spinnerReady = false
     private var defaultVoiceEntries: List<Voice> = emptyList()
     private var previewGeneration = 0
+    private lateinit var modelPacks: ModelPackManager
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
+        modelPacks = ModelPackManager(this)
 
         findViewById<MaterialToolbar>(R.id.toolbar)
 
@@ -50,6 +54,8 @@ class MainActivity : ComponentActivity() {
         val metrics = findViewById<ChipGroup>(R.id.metrics)
         speak.isEnabled = false
         input.setText(DEMO_TEXT)
+
+        setUpModelPackControls(status, speak)
 
         bindEnumSpinner(
             findViewById(R.id.quality),
@@ -166,6 +172,158 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         refreshEngineStatus()
+        refreshModelPackUi()
+    }
+
+    private fun setUpModelPackControls(status: TextView, speak: MaterialButton) {
+        findViewById<MaterialButton>(R.id.model_pack_micro_install).setOnClickListener {
+            installModelPack(ModelVariant.MICRO, status, speak)
+        }
+        findViewById<MaterialButton>(R.id.model_pack_nano_install).setOnClickListener {
+            installModelPack(ModelVariant.NANO, status, speak)
+        }
+        findViewById<MaterialButton>(R.id.model_pack_micro_delete).setOnClickListener {
+            deleteModelPack(ModelVariant.MICRO, status, speak)
+        }
+        findViewById<MaterialButton>(R.id.model_pack_nano_delete).setOnClickListener {
+            deleteModelPack(ModelVariant.NANO, status, speak)
+        }
+        refreshModelPackUi()
+    }
+
+    private fun refreshModelPackUi() {
+        refreshModelPackRow(
+            ModelVariant.MICRO,
+            R.id.model_pack_micro_status,
+            R.id.model_pack_micro_progress,
+            R.id.model_pack_micro_install,
+            R.id.model_pack_micro_delete,
+        )
+        refreshModelPackRow(
+            ModelVariant.NANO,
+            R.id.model_pack_nano_status,
+            R.id.model_pack_nano_progress,
+            R.id.model_pack_nano_install,
+            R.id.model_pack_nano_delete,
+        )
+    }
+
+    private fun refreshModelPackRow(
+        variant: ModelVariant,
+        statusId: Int,
+        progressId: Int,
+        installId: Int,
+        deleteId: Int,
+    ) {
+        val statusView = findViewById<TextView>(statusId)
+        val progress = findViewById<ProgressBar>(progressId)
+        val install = findViewById<MaterialButton>(installId)
+        val delete = findViewById<MaterialButton>(deleteId)
+        val installing = installingPack == variant
+        val installed = modelPacks.isInstalled(variant)
+        val assets = modelPacks.hasAssetGraphs(variant)
+        val approxMb = runCatching {
+            modelPacks.loadManifest().descriptor(variant).approxBytes / 1e6
+        }.getOrDefault(0.0)
+
+        statusView.text = when {
+            installing -> statusView.text
+            installed -> getString(R.string.model_pack_status_ready, variant.label)
+            assets -> getString(R.string.model_pack_status_assets, variant.label)
+            else -> getString(R.string.model_pack_status_missing, variant.label, approxMb)
+        }
+        progress.visibility = if (installing) View.VISIBLE else View.GONE
+        install.isEnabled = !installing && installingPack == null && !installed
+        delete.isEnabled = !installing && installingPack == null && installed
+    }
+
+    private fun installModelPack(
+        variant: ModelVariant,
+        status: TextView,
+        speak: MaterialButton,
+        afterInstall: (() -> Unit)? = null,
+    ) {
+        if (installingPack != null) return
+        if (modelPacks.isInstalled(variant)) {
+            afterInstall?.invoke()
+            return
+        }
+        installingPack = variant
+        val progress = findViewById<ProgressBar>(
+            if (variant == ModelVariant.MICRO) {
+                R.id.model_pack_micro_progress
+            } else {
+                R.id.model_pack_nano_progress
+            },
+        )
+        val statusRow = findViewById<TextView>(
+            if (variant == ModelVariant.MICRO) {
+                R.id.model_pack_micro_status
+            } else {
+                R.id.model_pack_nano_status
+            },
+        )
+        progress.progress = 0
+        progress.visibility = View.VISIBLE
+        refreshModelPackUi()
+        status.text = getString(R.string.model_pack_downloading, variant.label, 0)
+        lifecycleScope.launch {
+            try {
+                modelPacks.install(variant) { fraction ->
+                    val percent = (fraction * 100).toInt().coerceIn(0, 100)
+                    runOnUiThread {
+                        progress.progress = percent
+                        statusRow.text = getString(
+                            R.string.model_pack_downloading,
+                            variant.label,
+                            percent,
+                        )
+                        status.text = statusRow.text
+                    }
+                }
+                sendBroadcast(Intent(TextToSpeech.Engine.ACTION_TTS_DATA_INSTALLED))
+                refreshDefaultVoiceSpinner(findViewById(R.id.default_voice))
+                if (afterInstall != null) {
+                    afterInstall.invoke()
+                } else if (
+                    ModelPreferences.get(this@MainActivity) == variant ||
+                    VoicePreferences.resolvedDefaultVoiceName(this@MainActivity) == variant.id
+                ) {
+                    reloadEngine(status, speak)
+                } else {
+                    status.text = getString(R.string.model_pack_status_ready, variant.label)
+                }
+            } catch (error: Exception) {
+                status.text = getString(
+                    R.string.model_pack_install_failed,
+                    error.message.orEmpty(),
+                )
+            } finally {
+                installingPack = null
+                refreshModelPackUi()
+            }
+        }
+    }
+
+    private fun deleteModelPack(
+        variant: ModelVariant,
+        status: TextView,
+        speak: MaterialButton,
+    ) {
+        if (installingPack != null) return
+        modelPacks.delete(variant)
+        if (tts?.variant == variant) {
+            tts?.let { EngineRepository.releaseBlocking(it) }
+            tts = null
+            speak.isEnabled = false
+        }
+        refreshModelPackUi()
+        refreshDefaultVoiceSpinner(findViewById(R.id.default_voice))
+        val approxMb = runCatching {
+            modelPacks.loadManifest().descriptor(variant).approxBytes / 1e6
+        }.getOrDefault(0.0)
+        status.text = getString(R.string.model_pack_status_missing, variant.label, approxMb)
+        sendBroadcast(Intent(TextToSpeech.Engine.ACTION_TTS_DATA_INSTALLED))
     }
 
     private fun showMetrics(group: ChipGroup, audioSeconds: Float, totalMs: Long, ttfaMs: Long) {
@@ -230,8 +388,18 @@ class MainActivity : ComponentActivity() {
                 VoicePreferences.setDefaultVoice(this@MainActivity, voice.name)
                 sendBroadcast(Intent(TextToSpeech.Engine.ACTION_TTS_DATA_INSTALLED))
                 val target = CloudVoiceCatalog.resolve(this@MainActivity, voice.name)
-                if (target is VoiceTarget.OnDevice && tts?.variant != target.variant) {
-                    reloadEngine(status, speak)
+                if (target is VoiceTarget.OnDevice) {
+                    val ready = modelPacks.isInstalled(target.variant) ||
+                        modelPacks.hasAssetGraphs(target.variant)
+                    if (!ready) {
+                        installModelPack(target.variant, status, speak) {
+                            reloadEngine(status, speak)
+                        }
+                    } else if (tts?.variant != target.variant) {
+                        reloadEngine(status, speak)
+                    } else {
+                        status.text = readyLabel()
+                    }
                 } else {
                     status.text = readyLabel()
                 }
@@ -463,6 +631,9 @@ class MainActivity : ComponentActivity() {
                 }
                 status.text = readyLabel()
                 speak.isEnabled = true
+            } catch (error: ModelPackMissingException) {
+                status.text = getString(R.string.model_pack_missing_hint)
+                speak.isEnabled = false
             } catch (error: Exception) {
                 status.text = getString(R.string.synthesis_failed, error.message.orEmpty())
             } finally {

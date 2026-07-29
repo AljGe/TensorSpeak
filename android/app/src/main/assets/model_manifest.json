@@ -1,0 +1,16 @@
+{
+  "repo": "AljGe/TensorSpeak",
+  "urlTemplate": "https://github.com/AljGe/TensorSpeak/releases/download/v{version}/{assetName}",
+  "variants": {
+    "micro": {
+      "assetName": "TensorSpeak-model-micro.zip",
+      "zipSha256": "9ccb0506d2c3e7cb2e4751ff6e311a0b0bcab791e21a2d8e187da8690711771f",
+      "approxBytes": 34820428
+    },
+    "nano": {
+      "assetName": "TensorSpeak-model-nano.zip",
+      "zipSha256": "220727cb5494d5c611abb847d996bcf90c3d9950c47e44d58239c3df58983d58",
+      "approxBytes": 14788940
+    }
+  }
+}

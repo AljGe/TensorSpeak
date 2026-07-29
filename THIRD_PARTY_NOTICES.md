@@ -18,11 +18,12 @@ under the GNU General Public License v3.0 or later - see [LICENSE](LICENSE).
 - **Sources:**
   - https://huggingface.co/owensong/Inflect-Micro-v2-ONNX
   - https://huggingface.co/owensong/Inflect-Nano-v2-ONNX
-- **Used as:** `duration.onnx` and `decode.onnx` under `assets/micro/` and
-  `assets/nano/` in the APK (copied by `scripts/export_android_assets.py`; graphs
-  are gitignored and regenerated from Hugging Face).
-- **Notice:** Full Apache-2.0 text ships next to the graphs as
-  `assets/<variant>/LICENSE` after export. See also [docs/MODEL_ATTRIBUTION.md](docs/MODEL_ATTRIBUTION.md).
+- **Used as:** `duration.onnx` and `decode.onnx` downloaded as GitHub Release ZIPs
+  (`TensorSpeak-model-micro.zip` / `TensorSpeak-model-nano.zip`) into
+  `filesDir/models/<variant>/` via `ModelPackManager` (packed by
+  `scripts/pack_model_assets.py`; graphs are gitignored and regenerated from Hugging Face).
+- **Notice:** Full Apache-2.0 text ships inside each model ZIP as `LICENSE`. See also
+  [docs/MODEL_ATTRIBUTION.md](docs/MODEL_ATTRIBUTION.md).
 
 ---
 

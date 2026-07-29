@@ -4,22 +4,24 @@
   <img src="docs/branding/icon-512.png" width="128" height="128" alt="TensorSpeak" />
 </p>
 
-On-device Android text-to-speech built on **[Inflect](https://github.com/owenawsong/Inflect)** by [Owen Song](https://github.com/owenawsong) ([@owenawsong](https://github.com/owenawsong)): complete local text-to-waveform stacks under ~10M parameters. This app ships the official ONNX exports [Inflect-Micro-v2-ONNX](https://huggingface.co/owensong/Inflect-Micro-v2-ONNX) (9.36M, default) and [Inflect-Nano-v2-ONNX](https://huggingface.co/owensong/Inflect-Nano-v2-ONNX) (3.96M, faster)—24 kHz mono, Apache-2.0. For what the models are, how they were measured, and runtime benchmarks, see Owen’s [Inflect v2 evaluation writeup](https://huggingface.co/owensong/Inflect-Micro-v2/blob/main/docs/EVALUATION.md) and the [Micro v2](https://huggingface.co/owensong/Inflect-Micro-v2) / [Nano v2](https://huggingface.co/owensong/Inflect-Nano-v2) model cards on Hugging Face.
+On-device Android text-to-speech built on **[Inflect](https://github.com/owenawsong/Inflect)** by [Owen Song](https://github.com/owenawsong) ([@owenawsong](https://github.com/owenawsong)): complete local text-to-waveform stacks under ~10M parameters. This app uses the official ONNX exports [Inflect-Micro-v2-ONNX](https://huggingface.co/owensong/Inflect-Micro-v2-ONNX) (9.36M, default) and [Inflect-Nano-v2-ONNX](https://huggingface.co/owensong/Inflect-Nano-v2-ONNX) (3.96M, faster)—24 kHz mono, Apache-2.0. Graphs download once from GitHub Releases (not bundled in the APK). For what the models are, how they were measured, and runtime benchmarks, see Owen’s [Inflect v2 evaluation writeup](https://huggingface.co/owensong/Inflect-Micro-v2/blob/main/docs/EVALUATION.md) and the [Micro v2](https://huggingface.co/owensong/Inflect-Micro-v2) / [Nano v2](https://huggingface.co/owensong/Inflect-Nano-v2) model cards on Hugging Face.
 
-TensorSpeak is a separate Android port and system TTS wrapper; the voices and graphs are Owen’s Inflect releases. Choose **Micro** or **Nano** in the app or in system TTS settings.
+TensorSpeak is a separate Android port and system TTS wrapper; the voices and graphs are Owen’s Inflect releases. Choose **Micro** or **Nano** in the app or in system TTS settings, and install the matching model pack in the app’s **On-device models** section (or pick the voice and let the app download it).
 
 ## Install
 
 [![Get it on Obtainium](https://raw.githubusercontent.com/ImranR98/Obtainium/main/assets/graphics/badge_obtainium.png)](http://apps.obtainium.imranr.dev/redirect.html?r=obtainium://add/https://github.com/AljGe/TensorSpeak)
 
-Install and update from [GitHub Releases](https://github.com/AljGe/TensorSpeak/releases) with [Obtainium](https://github.com/ImranR98/Obtainium), or download a per-ABI APK manually. Releases are signed and include both model variants.
+Install and update from [GitHub Releases](https://github.com/AljGe/TensorSpeak/releases) with [Obtainium](https://github.com/ImranR98/Obtainium), or download a per-ABI APK manually. Releases are signed; ONNX model packs are separate assets on the same release.
 
 | Device | Asset | Obtainium APK filter |
 | --- | --- | --- |
 | Phones (almost all) | `TensorSpeak-*-arm64-v8a.apk` | `arm64` |
 | x86_64 emulator / Chromebook | `TensorSpeak-*-x86_64.apk` | `x86_64` |
+| On-device Micro graphs | `TensorSpeak-model-micro.zip` | (not an APK — install in-app) |
+| On-device Nano graphs | `TensorSpeak-model-nano.zip` | (not an APK — install in-app) |
 
-In Obtainium, set **APK filter** to `arm64` on phones so updates do not pick the x86_64 build.
+In Obtainium, set **APK filter** to `arm64` on phones so updates do not pick the x86_64 build or the model ZIPs.
 
 After install, enable **TensorSpeak** under **Settings → Accessibility → Text-to-speech output** (or your device’s equivalent).
 
@@ -65,12 +67,13 @@ python scripts/inspect_graphs.py            # regenerate docs/TENSOR_CONTRACT.md
 ### Android
 
 ```bash
-python scripts/export_android_assets.py --espeak-data
+python scripts/export_android_assets.py --skip-models --espeak-data
+python scripts/pack_model_assets.py
 python scripts/export_frontend_golden.py
 cd android && ./gradlew :app:assembleDebug :app:testDebugUnitTest
 ```
 
-Debug builds are large (~94 MB): uncompressed ONNX graphs, ONNX Runtime natives, trimmed eSpeak voice data (~0.9 MB), and `libtensorspeak_espeak.so` per ABI.
+Release/debug APKs omit the ~54 MB of ONNX graphs (downloaded on demand). Remaining size is mostly ONNX Runtime natives, trimmed eSpeak voice data (~0.9 MB), and `libtensorspeak_espeak.so` per ABI. For offline debug work you can still run `export_android_assets.py --espeak-data` **without** `--skip-models` so graphs stay in assets as a fallback.
 
 **Frontend parity** (normalization, phonemizer-compatible punctuation, IPA) is covered on the JVM and on the host where possible:
 
@@ -84,29 +87,31 @@ Agent-oriented architecture notes, release signing, and Obtainium checklist live
 
 ## Release APK
 
-Models and ONNX assets are gitignored; fetch and export before a release build:
+Models are gitignored; fetch, pack ZIPs, and export slim assets before a release build
+(or use the release script, which does all of this):
 
 ```bash
 python scripts/fetch_model.py
-python scripts/export_android_assets.py --espeak-data
+python scripts/export_android_assets.py --skip-models --espeak-data
+python scripts/pack_model_assets.py
 ```
 
 Configure signing via [`.signing.env.example`](.signing.env.example) → `.signing.env` (or `android/keystore.properties`). Keep the keystore **outside** the repository.
 
 ```bash
 set -a && source .signing.env && set +a
-./scripts/build_signed_release_apk.sh          # → TensorSpeak-<version>-{arm64-v8a,x86_64}.apk
-./scripts/build_signed_release_apk.sh --upload # refresh both GitHub release assets
+./scripts/build_signed_release_apk.sh          # → APKs + out/model-packs/*.zip
+./scripts/build_signed_release_apk.sh --upload # refresh APKs + model ZIPs on GitHub
 ```
 
-Publish releases (not draft-only) with tag matching `versionName` in `android/app/build.gradle.kts`, both per-ABI APK assets, and links to [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) and [docs/MODEL_ATTRIBUTION.md](docs/MODEL_ATTRIBUTION.md).
+Publish releases (not draft-only) with tag matching `versionName` in `android/app/build.gradle.kts`, both per-ABI APK assets, both model ZIPs, and links to [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) and [docs/MODEL_ATTRIBUTION.md](docs/MODEL_ATTRIBUTION.md).
 
 ## Credits
 
 | | |
 | --- | --- |
 | **Inflect** (models, training, Hugging Face releases) | [Owen Song](https://github.com/owenawsong) ([@owenawsong](https://github.com/owenawsong)) — [Inflect](https://github.com/owenawsong/Inflect), [evaluation & benchmarks](https://huggingface.co/owensong/Inflect-Micro-v2/blob/main/docs/EVALUATION.md) |
-| **ONNX packaging** | Robert Bak ([`webtts-inflect`](https://github.com/robertbak/webtts-inflect)) — graphs used in this APK |
+| **ONNX packaging** | Robert Bak ([`webtts-inflect`](https://github.com/robertbak/webtts-inflect)) — graphs used by this app |
 | **TensorSpeak** (Android app, this repo) | [AljGe](https://github.com/AljGe) |
 
 ## License

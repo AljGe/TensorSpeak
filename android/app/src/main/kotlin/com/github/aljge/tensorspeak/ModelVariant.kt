@@ -1,9 +1,11 @@
 package com.github.aljge.tensorspeak
 
 /**
- * Which Inflect ONNX graph pair to load from assets.
+ * Which Inflect ONNX graph pair to load.
  *
- * Graphs live under `assets/<id>/duration.onnx` and `assets/<id>/decode.onnx`.
+ * Production loads from an installed GitHub model pack under
+ * `filesDir/models/<id>/`. Debug builds may still ship graphs under
+ * `assets/<id>/duration.onnx` and `assets/<id>/decode.onnx`.
  * The text frontend (`symbols.json`, eSpeak) is shared.
  */
 enum class ModelVariant(

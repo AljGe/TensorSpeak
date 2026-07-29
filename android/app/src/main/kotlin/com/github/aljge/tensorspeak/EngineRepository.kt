@@ -7,7 +7,7 @@ import kotlinx.coroutines.sync.withLock
 
 /**
  * Process-wide, reference-counted [OnnxTts] cache so the settings activity and the system
- * TTS service do not both materialize the same ~16-38 MB graph pair.
+ * TTS service do not both open the same ~16-38 MB graph pair.
  */
 object EngineRepository {
     private val mutex = Mutex()

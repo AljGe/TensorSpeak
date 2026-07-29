@@ -141,14 +141,23 @@ def main() -> None:
         json.dumps(fixtures, ensure_ascii=False, indent=2)
     )
 
-    if not args.skip_models:
-        # Drop any pre-variant flat graphs left over from older exports.
-        for stale in ("duration.onnx", "decode.onnx"):
-            flat = ASSETS / stale
-            if flat.exists():
-                flat.unlink()
-                print(f"  removed stale flat asset {stale}")
+    # Drop any pre-variant flat graphs left over from older exports.
+    for stale in ("duration.onnx", "decode.onnx"):
+        flat = ASSETS / stale
+        if flat.exists():
+            flat.unlink()
+            print(f"  removed stale flat asset {stale}")
 
+    if args.skip_models:
+        # Slim APK: graphs ship as GitHub Release ZIPs (see pack_model_assets.py).
+        for variant in VARIANTS:
+            dest_dir = ASSETS / variant
+            for name in ("duration.onnx", "decode.onnx"):
+                path = dest_dir / name
+                if path.exists():
+                    path.unlink()
+                    print(f"  removed {variant}/{name} (--skip-models)")
+    else:
         for variant in VARIANTS:
             dest_dir = ASSETS / variant
             dest_dir.mkdir(parents=True, exist_ok=True)
