@@ -11,9 +11,9 @@ enum class LatencyProfile(
     val firstChunkLimit: Int,
     val chunkLimit: Int,
 ) {
-    FAST("fast", "Experimental · faster start", 64, 160),
-    BALANCED("balanced", "Balanced (default)", 96, 280),
-    CONTINUOUS("continuous", "Longer phrases", 280, 560);
+    FAST("fast", "Faster start · first 64 / later 160", 64, 160),
+    BALANCED("balanced", "Balanced · first 96 / later 280 (default)", 96, 280),
+    CONTINUOUS("continuous", "Longer phrases · first 280 / later 560", 280, 560);
 
     companion object {
         val DEFAULT = BALANCED

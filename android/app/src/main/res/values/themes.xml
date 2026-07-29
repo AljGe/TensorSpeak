@@ -13,6 +13,8 @@
         <item name="colorOnSurfaceVariant">@color/ts_on_surface_variant</item>
         <item name="colorError">@color/ts_error</item>
         <item name="colorOnError">@color/ts_on_error</item>
+        <item name="colorOutline">@color/ts_outline</item>
+        <item name="colorOutlineVariant">@color/ts_outline_variant</item>
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>
     </style>

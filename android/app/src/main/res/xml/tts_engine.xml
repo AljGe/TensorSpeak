@@ -3,9 +3,10 @@
   Referenced from the `android.speech.tts` meta-data on TensorSpeakTtsService. Without it the
   engine does not show up in Settings > Accessibility > Text-to-speech.
 
-  `settingsActivity` is what the gear icon next to the engine opens; MainActivity doubles as
-  that screen. CHECK_TTS_DATA is answered separately by CheckVoiceDataActivity, which the
-  framework finds through its intent filter rather than through this file.
+  `settingsActivity` is what the gear icon next to the engine opens; MainActivity hosts Try /
+  Voices / Engine tabs and opens on Engine when launched from system settings (not the launcher).
+  CHECK_TTS_DATA is answered separately by CheckVoiceDataActivity, which the framework finds
+  through its intent filter rather than through this file.
 -->
 <tts-engine xmlns:android="http://schemas.android.com/apk/res/android"
     android:settingsActivity="com.github.aljge.tensorspeak.MainActivity" />

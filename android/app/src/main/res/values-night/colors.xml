@@ -12,6 +12,8 @@
     <color name="ts_on_surface_variant">#BFC8CB</color>
     <color name="ts_error">#FFB4AB</color>
     <color name="ts_on_error">#690005</color>
+    <color name="ts_outline">#899295</color>
+    <color name="ts_outline_variant">#3F484B</color>
     <color name="ts_icon_background">#004B71</color>
     <color name="ts_icon_foreground">#C8E6FF</color>
 </resources>
