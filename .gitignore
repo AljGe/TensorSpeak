@@ -94,3 +94,5 @@ CLAUDE.md
 keystore.properties
 signing.properties
 .signing.env
+sherpa-onnx-1.13.4-arm64-v8a-eng-tts-engine-vits-inflect-en-micro-v2.apk
+cloudflare-worker/*

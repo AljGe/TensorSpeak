@@ -5,6 +5,7 @@ import android.speech.tts.SynthesisCallback
 import android.speech.tts.SynthesisRequest
 import android.speech.tts.TextToSpeech
 import android.speech.tts.TextToSpeechService
+import android.speech.tts.Voice
 import android.util.Log
 import kotlinx.coroutines.runBlocking
 
@@ -15,10 +16,19 @@ import kotlinx.coroutines.runBlocking
  * The framework calls [onSynthesizeText] on a dedicated synthesis thread and expects the call
  * to block until the audio has been handed over, which is why this uses `runBlocking` rather
  * than a scope of its own.
+ *
+ * Voices are either the on-device Micro/Nano models or a commercial cloud provider (OpenAI /
+ * ElevenLabs / a custom endpoint) — see [CloudVoiceCatalog]. [onLoadVoice] resolves the chosen
+ * voice into [loadedTarget]; when a caller never calls `setVoice()`, [loadedTarget] stays null
+ * and synthesis falls back to the on-device model chosen in the app's settings screen.
  */
 class TensorSpeakTtsService : TextToSpeechService() {
 
     private var engine: OnnxTts? = null
+    private val cloudTts = CloudTts()
+
+    @Volatile
+    private var loadedTarget: VoiceTarget? = null
 
     @Volatile
     private var stopRequested = false
@@ -35,6 +45,29 @@ class TensorSpeakTtsService : TextToSpeechService() {
         EspeakNative.release()
         super.onDestroy()
     }
+
+    override fun onGetVoices(): List<Voice> = CloudVoiceCatalog.voices(applicationContext)
+
+    override fun onIsValidVoiceName(voiceName: String?): Int =
+        if (CloudVoiceCatalog.resolve(applicationContext, voiceName) != null) {
+            TextToSpeech.SUCCESS
+        } else {
+            TextToSpeech.ERROR
+        }
+
+    override fun onLoadVoice(voiceName: String?): Int {
+        val target = CloudVoiceCatalog.resolve(applicationContext, voiceName)
+            ?: return TextToSpeech.ERROR
+        loadedTarget = target
+        return TextToSpeech.SUCCESS
+    }
+
+    override fun onGetDefaultVoiceNameFor(lang: String?, country: String?, variant: String?): String? =
+        if (onIsLanguageAvailable(lang, country, variant) != TextToSpeech.LANG_NOT_SUPPORTED) {
+            ModelPreferences.get(applicationContext).id
+        } else {
+            null
+        }
 
     override fun onIsLanguageAvailable(lang: String?, country: String?, variant: String?): Int =
         when {
@@ -78,6 +111,7 @@ class TensorSpeakTtsService : TextToSpeechService() {
     override fun onStop() {
         stopRequested = true
         engine?.requestStop()
+        cloudTts.requestStop()
     }
 
     override fun onSynthesizeText(request: SynthesisRequest?, callback: SynthesisCallback?) {
@@ -91,11 +125,25 @@ class TensorSpeakTtsService : TextToSpeechService() {
             return
         }
 
+        // speechRate and pitch both arrive as percentages with 100 = normal. The graphs take
+        // a length scale but have no pitch control, so pitch is ignored on-device; OpenAI's
+        // API accepts a speed multiplier directly, ElevenLabs/custom endpoints ignore it.
+        val speed = (request.speechRate / 100.0f).coerceIn(MIN_SPEED, MAX_SPEED)
+
+        when (val target = loadedTarget) {
+            is VoiceTarget.Cloud -> synthesizeCloud(text, speed, target.selection, callback)
+            else -> synthesizeOnDevice(text, speed, (target as? VoiceTarget.OnDevice)?.variant, callback)
+        }
+    }
+
+    private fun synthesizeOnDevice(
+        text: String,
+        speed: Float,
+        variantOverride: ModelVariant?,
+        callback: SynthesisCallback,
+    ) {
         try {
-            val engine = requireEngine()
-            // speechRate and pitch both arrive as percentages with 100 = normal. The graphs
-            // take a length scale but have no pitch control, so pitch is ignored.
-            val speed = (request.speechRate / 100.0f).coerceIn(MIN_SPEED, MAX_SPEED)
+            val engine = requireEngine(variantOverride)
 
             // start() before synthesis, so the framework opens the audio path while the
             // first chunk is still decoding rather than after the last one finishes.
@@ -128,6 +176,30 @@ class TensorSpeakTtsService : TextToSpeechService() {
         }
     }
 
+    private fun synthesizeCloud(
+        text: String,
+        speed: Float,
+        selection: CloudVoiceSelection,
+        callback: SynthesisCallback,
+    ) {
+        try {
+            val result = runBlocking {
+                cloudTts.synthesize(text, speed, selection, shouldContinue = { !stopRequested })
+            }
+            // Sample rate is only known once the response is decoded, so start() waits for it
+            // (unlike the on-device path, which knows SAMPLE_RATE statically up front).
+            callback.start(result.sampleRate, AudioFormat.ENCODING_PCM_16BIT, 1)
+            if (streamPcm(result.samples, callback)) {
+                callback.done()
+            } else {
+                callback.error()
+            }
+        } catch (error: Exception) {
+            Log.e(TAG, "cloud synthesis failed for: $text", error)
+            callback.error()
+        }
+    }
+
     /**
      * Feeds the waveform out in `maxBufferSize` pieces, converting float PCM to the 16-bit
      * PCM the framework asked for.
@@ -156,8 +228,8 @@ class TensorSpeakTtsService : TextToSpeechService() {
     }
 
     @Synchronized
-    private fun requireEngine(): OnnxTts {
-        val preferred = ModelPreferences.get(applicationContext)
+    private fun requireEngine(variantOverride: ModelVariant? = null): OnnxTts {
+        val preferred = variantOverride ?: ModelPreferences.get(applicationContext)
         val config = ModelPreferences.runtimeConfig(applicationContext)
         engine?.let { current ->
             if (current.variant == preferred && current.runtimeConfig == config) return current

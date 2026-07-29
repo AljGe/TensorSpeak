@@ -49,4 +49,21 @@
     <string name="benchmark_advanced_title">Full suite (developers)</string>
     <string name="benchmark_adb_hint">For the complete variant × provider matrix and CPU threading sweep, run the instrumented benchmark via adb. Results also appear in logcat with tag SynthBench.</string>
     <string name="benchmark_adb_command">adb shell am instrument -w -e class com.github.aljge.tensorspeak.SynthesisBenchmark#benchmarkVariantsAndProviders com.github.aljge.tensorspeak.test/androidx.test.runner.AndroidJUnitRunner</string>
+    <string name="cloud_voices_title">Cloud voices</string>
+    <string name="cloud_voices_body">Optional. Add an API key to expose a commercial provider as extra system voices — synthesis then leaves the device over the network for those voices only.</string>
+    <string name="openai_title">OpenAI</string>
+    <string name="elevenlabs_title">ElevenLabs</string>
+    <string name="custom_title">Custom endpoint</string>
+    <string name="api_key_hint">API key</string>
+    <string name="api_key_optional_hint">API key (optional)</string>
+    <string name="voice_slots_hint">Voices, one per line</string>
+    <string name="voice_slots_helper">label|voice id, e.g. Rachel|21m00Tcm4TlvDq8ikWAM</string>
+    <string name="custom_base_url_hint">Base URL</string>
+    <string name="custom_model_hint">Model (optional)</string>
+    <string name="save_cloud_settings">Save cloud settings</string>
+    <string name="cloud_status_saved">Saved · %1$d cloud voice(s) available</string>
+    <string name="preview_cloud_voice">Preview selected voice</string>
+    <string name="preview_no_voices">Add and save an API key to preview a cloud voice.</string>
+    <string name="preview_failed">Preview failed: %1$s</string>
+    <string name="preview_playing">Playing…</string>
 </resources>

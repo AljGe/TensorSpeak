@@ -3,6 +3,8 @@ package com.github.aljge.tensorspeak
 import android.content.Intent
 import android.os.Bundle
 import android.provider.Settings
+import android.speech.tts.TextToSpeech
+import android.speech.tts.UtteranceProgressListener
 import android.view.View
 import android.widget.AdapterView
 import android.widget.ArrayAdapter
@@ -29,6 +31,7 @@ class MainActivity : ComponentActivity() {
     private var tts: OnnxTts? = null
     private var loadingModel = false
     private var spinnerReady = false
+    private var previewTts: TextToSpeech? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -102,6 +105,8 @@ class MainActivity : ComponentActivity() {
             ModelPreferences.setThreadProfile(this, selected)
             reloadEngine(status, speak)
         }
+
+        setUpCloudVoicesSection()
 
         reloadEngine(status, speak) {
             spinnerReady = true
@@ -197,6 +202,115 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun setUpCloudVoicesSection() {
+        val openAiKey = findViewById<TextInputEditText>(R.id.openai_api_key)
+        val elevenLabsKey = findViewById<TextInputEditText>(R.id.elevenlabs_api_key)
+        val elevenLabsSlots = findViewById<TextInputEditText>(R.id.elevenlabs_voice_slots)
+        val customBaseUrl = findViewById<TextInputEditText>(R.id.custom_base_url)
+        val customKey = findViewById<TextInputEditText>(R.id.custom_api_key)
+        val customModel = findViewById<TextInputEditText>(R.id.custom_model)
+        val customSlots = findViewById<TextInputEditText>(R.id.custom_voice_slots)
+        val cloudStatus = findViewById<TextView>(R.id.cloud_status)
+        val previewSpinner = findViewById<Spinner>(R.id.preview_voice)
+        val previewButton = findViewById<MaterialButton>(R.id.preview_play)
+
+        openAiKey.setText(CloudTtsSecrets.openAiApiKey(this))
+        elevenLabsKey.setText(CloudTtsSecrets.elevenLabsApiKey(this))
+        elevenLabsSlots.setText(CloudTtsPreferences.elevenLabsVoiceSlotsText(this))
+        customBaseUrl.setText(CloudTtsPreferences.customBaseUrl(this))
+        customKey.setText(CloudTtsSecrets.customApiKey(this))
+        customModel.setText(CloudTtsPreferences.customModel(this))
+        customSlots.setText(CloudTtsPreferences.customVoiceSlotsText(this))
+
+        bindEnumSpinner(
+            findViewById(R.id.openai_model),
+            OpenAiModel.entries,
+            { it.label },
+            CloudTtsPreferences.openAiModel(this),
+        ) { CloudTtsPreferences.setOpenAiModel(this, it) }
+
+        bindEnumSpinner(
+            findViewById(R.id.elevenlabs_model),
+            ElevenLabsModel.entries,
+            { it.label },
+            CloudTtsPreferences.elevenLabsModel(this),
+        ) { CloudTtsPreferences.setElevenLabsModel(this, it) }
+
+        refreshPreviewVoices(previewSpinner)
+
+        findViewById<MaterialButton>(R.id.save_cloud_settings).setOnClickListener {
+            CloudTtsSecrets.setOpenAiApiKey(this, openAiKey.text?.toString().orEmpty())
+            CloudTtsSecrets.setElevenLabsApiKey(this, elevenLabsKey.text?.toString().orEmpty())
+            CloudTtsPreferences.setElevenLabsVoiceSlotsText(
+                this, elevenLabsSlots.text?.toString().orEmpty(),
+            )
+            CloudTtsPreferences.setCustomBaseUrl(this, customBaseUrl.text?.toString().orEmpty())
+            CloudTtsSecrets.setCustomApiKey(this, customKey.text?.toString().orEmpty())
+            CloudTtsPreferences.setCustomModel(this, customModel.text?.toString().orEmpty())
+            CloudTtsPreferences.setCustomVoiceSlotsText(this, customSlots.text?.toString().orEmpty())
+
+            val voiceCount = refreshPreviewVoices(previewSpinner)
+            cloudStatus.text = getString(R.string.cloud_status_saved, voiceCount)
+        }
+
+        previewButton.setOnClickListener {
+            val voiceName = previewSpinner.selectedItem as? String
+            if (voiceName == null) {
+                cloudStatus.text = getString(R.string.preview_no_voices)
+                return@setOnClickListener
+            }
+            playPreview(voiceName, cloudStatus)
+        }
+    }
+
+    /** @return how many cloud voices are now configured. */
+    private fun refreshPreviewVoices(spinner: Spinner): Int {
+        val cloudVoiceNames = CloudVoiceCatalog.voices(this)
+            .map { it.name }
+            .filter { name -> ModelVariant.entries.none { it.id == name } }
+        spinner.adapter = ArrayAdapter(
+            this,
+            android.R.layout.simple_spinner_dropdown_item,
+            cloudVoiceNames,
+        )
+        return cloudVoiceNames.size
+    }
+
+    /**
+     * Speaks through this app's own registered `TextToSpeechService`, exercising the exact
+     * `onLoadVoice`/`onSynthesizeText` path a real reader app would use — the practical way to
+     * verify a cloud voice end-to-end, since stock Settings > Accessibility > TTS has no
+     * per-voice picker.
+     */
+    private fun playPreview(voiceName: String, status: TextView) {
+        previewTts?.shutdown()
+        status.text = getString(R.string.preview_playing)
+        previewTts = TextToSpeech(this, { initStatus ->
+            val engine = previewTts
+            if (initStatus != TextToSpeech.SUCCESS || engine == null) {
+                status.text = getString(R.string.preview_failed, "engine init failed")
+                return@TextToSpeech
+            }
+            val voice = engine.voices?.firstOrNull { it.name == voiceName }
+            if (voice == null || engine.setVoice(voice) != TextToSpeech.SUCCESS) {
+                status.text = getString(R.string.preview_failed, "voice unavailable")
+                return@TextToSpeech
+            }
+            engine.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+                override fun onStart(utteranceId: String?) = Unit
+                override fun onDone(utteranceId: String?) {
+                    runOnUiThread { status.text = readyLabel() }
+                }
+
+                @Deprecated("required override")
+                override fun onError(utteranceId: String?) {
+                    runOnUiThread { status.text = getString(R.string.preview_failed, "synthesis error") }
+                }
+            })
+            engine.speak(PREVIEW_TEXT, TextToSpeech.QUEUE_FLUSH, null, "preview")
+        }, packageName)
+    }
+
     private fun <T> bindEnumSpinner(
         spinner: Spinner,
         values: List<T>,
@@ -277,10 +391,13 @@ class MainActivity : ComponentActivity() {
         player.close()
         tts?.let { EngineRepository.releaseBlocking(it) }
         tts = null
+        previewTts?.shutdown()
+        previewTts = null
         super.onDestroy()
     }
 
     private companion object {
         const val DEMO_TEXT = "A small voice can still have something meaningful to say."
+        const val PREVIEW_TEXT = "This is a preview of the selected cloud voice."
     }
 }

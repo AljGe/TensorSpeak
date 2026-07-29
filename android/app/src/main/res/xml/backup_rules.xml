@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Pre-Android-12 full-backup schema; data_extraction_rules.xml covers 12+. -->
+<full-backup-content>
+    <exclude domain="sharedpref" path="tensorspeak_cloud_secrets.xml" />
+</full-backup-content>
