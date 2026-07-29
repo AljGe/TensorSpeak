@@ -5,14 +5,16 @@ import android.media.AudioFormat
 import android.media.AudioTrack
 import java.io.Closeable
 
-/** Plays the pipeline's float PCM at the model's native 24 kHz, mono. */
+/** Plays float PCM mono audio. Sample rate defaults to the on-device model rate (24 kHz). */
 class AudioPlayer : Closeable {
 
     private var track: AudioTrack? = null
+    private var sampleRateHz: Int = OnnxTts.SAMPLE_RATE
 
     /** Blocking play of a complete waveform (tests / short clips). */
-    fun play(waveform: FloatArray) {
+    fun play(waveform: FloatArray, sampleRate: Int = OnnxTts.SAMPLE_RATE) {
         stop()
+        sampleRateHz = sampleRate
         val newTrack = buildTrack(
             bufferBytes = maxOf(minBufferBytes(), waveform.size * Float.SIZE_BYTES),
             mode = AudioTrack.MODE_STATIC,
@@ -26,8 +28,9 @@ class AudioPlayer : Closeable {
      * Open a streaming track so the first decoded chunk can start before the rest of the
      * utterance is ready. Returns false from [write] if the track was stopped.
      */
-    fun startStreaming(): Boolean {
+    fun startStreaming(sampleRate: Int = OnnxTts.SAMPLE_RATE): Boolean {
         stop()
+        sampleRateHz = sampleRate
         val newTrack = buildTrack(
             bufferBytes = minBufferBytes() * 2,
             mode = AudioTrack.MODE_STREAM,
@@ -73,10 +76,10 @@ class AudioPlayer : Closeable {
     override fun close() = stop()
 
     private fun minBufferBytes(): Int = AudioTrack.getMinBufferSize(
-        OnnxTts.SAMPLE_RATE,
+        sampleRateHz,
         AudioFormat.CHANNEL_OUT_MONO,
         AudioFormat.ENCODING_PCM_FLOAT,
-    ).coerceAtLeast(OnnxTts.SAMPLE_RATE / 10 * Float.SIZE_BYTES)
+    ).coerceAtLeast(sampleRateHz / 10 * Float.SIZE_BYTES)
 
     private fun buildTrack(bufferBytes: Int, mode: Int): AudioTrack =
         AudioTrack.Builder()
@@ -89,7 +92,7 @@ class AudioPlayer : Closeable {
             .setAudioFormat(
                 AudioFormat.Builder()
                     .setEncoding(AudioFormat.ENCODING_PCM_FLOAT)
-                    .setSampleRate(OnnxTts.SAMPLE_RATE)
+                    .setSampleRate(sampleRateHz)
                     .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
                     .build()
             )

@@ -4,7 +4,6 @@ import android.content.Intent
 import android.os.Bundle
 import android.provider.Settings
 import android.speech.tts.TextToSpeech
-import android.speech.tts.UtteranceProgressListener
 import android.speech.tts.Voice
 import android.view.View
 import android.widget.AdapterView
@@ -19,7 +18,9 @@ import com.google.android.material.button.MaterialButton
 import com.google.android.material.chip.Chip
 import com.google.android.material.chip.ChipGroup
 import com.google.android.material.textfield.TextInputEditText
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * Harness: load graphs, synthesize the text box, play it.
@@ -30,11 +31,12 @@ import kotlinx.coroutines.launch
 class MainActivity : ComponentActivity() {
 
     private val player = AudioPlayer()
+    private val cloudPreview = CloudTts()
     private var tts: OnnxTts? = null
     private var loadingModel = false
     private var spinnerReady = false
-    private var previewTts: TextToSpeech? = null
     private var defaultVoiceEntries: List<Voice> = emptyList()
+    private var previewGeneration = 0
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -327,57 +329,78 @@ class MainActivity : ComponentActivity() {
     }
 
     /**
-     * Speaks through this app's own registered `TextToSpeechService`, exercising the exact
-     * `onLoadVoice`/`onSynthesizeText` path a real reader app would use — the practical way to
-     * verify a voice end-to-end, since stock Settings > Accessibility > TTS often has no
-     * useful per-voice picker.
+     * In-app preview synthesizes directly (same [CloudTts] / [OnnxTts] the system service uses)
+     * and plays through [AudioPlayer]. Going through a nested `TextToSpeech` client was leaving
+     * the UI stuck on "Playing…" whenever the framework never delivered onDone/onError.
      */
     private fun playPreview(voiceName: String, status: TextView) {
-        previewTts?.shutdown()
-        status.text = getString(R.string.preview_playing)
-        previewTts = TextToSpeech(this, { initStatus ->
-            val engine = previewTts
-            if (initStatus != TextToSpeech.SUCCESS || engine == null) {
-                status.text = getString(R.string.preview_failed, "engine init failed")
-                return@TextToSpeech
-            }
-            val voice = engine.voices?.firstOrNull { it.name == voiceName }
-            if (voice == null || engine.setVoice(voice) != TextToSpeech.SUCCESS) {
-                status.text = getString(R.string.preview_failed, "voice unavailable")
-                return@TextToSpeech
-            }
-            engine.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
-                override fun onStart(utteranceId: String?) {
-                    runOnUiThread {
+        val target = CloudVoiceCatalog.resolve(this, voiceName)
+        if (target == null) {
+            status.text = getString(R.string.preview_failed, "voice unavailable")
+            return
+        }
+        val generation = ++previewGeneration
+        player.stop()
+        lifecycleScope.launch {
+            try {
+                when (target) {
+                    is VoiceTarget.Cloud -> {
+                        status.text = getString(R.string.preview_fetching)
+                        val result = withContext(Dispatchers.IO) {
+                            cloudPreview.synthesize(PREVIEW_TEXT, speed = 1f, target.selection)
+                        }
+                        if (generation != previewGeneration) return@launch
                         status.text = getString(R.string.preview_playing)
+                        withContext(Dispatchers.IO) {
+                            player.play(result.samples, result.sampleRate)
+                        }
+                    }
+                    is VoiceTarget.OnDevice -> {
+                        status.text = getString(R.string.preview_playing)
+                        val engine = tts
+                            ?: EngineRepository.acquire(
+                                this@MainActivity,
+                                target.variant,
+                                ModelPreferences.runtimeConfig(this@MainActivity),
+                            ).also { tts = it }
+                        if (engine.variant != target.variant) {
+                            EngineRepository.release(engine)
+                            tts = EngineRepository.acquire(
+                                this@MainActivity,
+                                target.variant,
+                                ModelPreferences.runtimeConfig(this@MainActivity),
+                            )
+                        }
+                        val active = tts ?: error("engine unavailable")
+                        val variation = ModelPreferences.variation(this@MainActivity, active.variant)
+                        val firstChunkLimit = ModelPreferences.latencyProfile(this@MainActivity)
+                            .firstChunkLimit
+                        var started = false
+                        active.synthesizeStreaming(
+                            text = PREVIEW_TEXT,
+                            variation = variation,
+                            firstChunkLimit = firstChunkLimit,
+                            shouldContinue = { generation == previewGeneration },
+                        ) { audio ->
+                            if (generation != previewGeneration) return@synthesizeStreaming false
+                            if (!started) {
+                                player.startStreaming(OnnxTts.SAMPLE_RATE)
+                                started = true
+                            }
+                            player.write(audio)
+                        }
                     }
                 }
-
-                override fun onDone(utteranceId: String?) {
-                    runOnUiThread { status.text = readyLabel() }
+                if (generation == previewGeneration) {
+                    status.text = getString(R.string.preview_done)
                 }
-
-                @Deprecated("required override")
-                override fun onError(utteranceId: String?) {
-                    runOnUiThread {
-                        status.text = getString(R.string.preview_failed, "synthesis error")
-                    }
-                }
-
-                override fun onError(utteranceId: String?, errorCode: Int) {
-                    runOnUiThread {
-                        status.text = getString(
-                            R.string.preview_failed,
-                            "synthesis error ($errorCode)",
-                        )
-                    }
-                }
-            })
-            val speakStatus = engine.speak(PREVIEW_TEXT, TextToSpeech.QUEUE_FLUSH, null, "preview")
-            if (speakStatus != TextToSpeech.SUCCESS) {
-                status.text = getString(R.string.preview_failed, "speak() returned $speakStatus")
+            } catch (error: Exception) {
+                if (generation != previewGeneration) return@launch
+                player.stop()
+                val detail = error.message?.take(160).orEmpty().ifEmpty { error.javaClass.simpleName }
+                status.text = getString(R.string.preview_failed, detail)
             }
-        }, packageName)
+        }
     }
 
     private fun <T> bindEnumSpinner(
@@ -463,11 +486,10 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
+        previewGeneration++
         player.close()
         tts?.let { EngineRepository.releaseBlocking(it) }
         tts = null
-        previewTts?.shutdown()
-        previewTts = null
         super.onDestroy()
     }
 

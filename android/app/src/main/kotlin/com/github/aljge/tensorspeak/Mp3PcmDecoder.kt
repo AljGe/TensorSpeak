@@ -39,6 +39,7 @@ object Mp3PcmDecoder {
             val bufferInfo = MediaCodec.BufferInfo()
             var inputDone = false
             var outputDone = false
+            var idleLoops = 0
 
             while (!outputDone) {
                 if (!inputDone) {
@@ -57,6 +58,7 @@ object Mp3PcmDecoder {
                             )
                             extractor.advance()
                         }
+                        idleLoops = 0
                     }
                 }
 
@@ -65,9 +67,16 @@ object Mp3PcmDecoder {
                         val newFormat = codec.outputFormat
                         sampleRate = newFormat.getInteger(MediaFormat.KEY_SAMPLE_RATE)
                         channelCount = newFormat.getInteger(MediaFormat.KEY_CHANNEL_COUNT)
+                        idleLoops = 0
                     }
-                    MediaCodec.INFO_TRY_AGAIN_LATER -> Unit
+                    MediaCodec.INFO_TRY_AGAIN_LATER -> {
+                        idleLoops++
+                        if (idleLoops > MAX_IDLE_LOOPS) {
+                            error("mp3 decode stalled (not audio, or codec hung)")
+                        }
+                    }
                     else -> if (outputIndex >= 0) {
+                        idleLoops = 0
                         val outputBuffer = codec.getOutputBuffer(outputIndex)
                         if (outputBuffer != null && bufferInfo.size > 0) {
                             appendPcm16(outputBuffer, bufferInfo, channelCount, output)
@@ -108,6 +117,7 @@ object Mp3PcmDecoder {
     }
 
     private const val TIMEOUT_US = 10_000L
+    private const val MAX_IDLE_LOOPS = 5_000
 
     private class ByteArrayMediaDataSource(private val data: ByteArray) : MediaDataSource() {
         override fun readAt(position: Long, buffer: ByteArray, offset: Int, size: Int): Int {
